@@ -678,18 +678,18 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
                       {/* 2. 카테고리 (신규 독립 컬럼) */}
                       <td className="px-3 py-3 border-r border-slate-200 whitespace-nowrap">
-                        <span className="font-bold text-slate-800 text-sm">
+                        <span className="font-medium text-slate-800 text-sm">
                           {item.categoryName}
                         </span>
                       </td>
 
-                      {/* 3. 품목명(규격 / 거래처): 일반 폰트 두께(font-normal) 및 서브텍스트 정돈 */}
-                      <td className="px-3 py-3 border-r border-slate-200 whitespace-nowrap font-normal">
-                        <div className="text-base font-normal text-slate-900 leading-snug">
+                      {/* 3. 품목명(규격 / 거래처): 볼드 해제 및 주변 텍스트와 동일한 선명한 기본 두께(font-medium) 유지 */}
+                      <td className="px-3 py-3 border-r border-slate-200 whitespace-nowrap">
+                        <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                           {`${item.itemName} ${item.spec}`}
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5 font-normal leading-snug flex items-center gap-1.5">
-                          <span className="font-normal text-slate-600">{item.vendorName}</span>
+                        <div className="text-xs text-slate-500 mt-0.5 leading-snug flex items-center gap-1.5">
+                          <span className="text-slate-700">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
                           <span className="text-slate-500">주기 {category?.orderCycleDays || 30}일</span>
                           {item.purpose && (
@@ -1069,9 +1069,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                     </div>
                   </div>
 
-                  {/* Title & Spec (Normal weight) */}
+                  {/* Title & Spec */}
                   <div className="py-1">
-                    <div className="text-sm font-normal text-slate-900 leading-snug">
+                    <div className="text-sm font-medium text-slate-900 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
                   </div>

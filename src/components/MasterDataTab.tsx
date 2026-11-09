@@ -583,7 +583,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                             {item.line}
                           </td>
                           <td className="px-3.5 py-3 border-r border-slate-200 text-slate-700 whitespace-nowrap">
-                            <div className="font-bold text-slate-800">{item.categoryName}</div>
+                            <div className="font-medium text-slate-800">{item.categoryName}</div>
                             <div className="text-xs mt-0.5">
                               {item.isQtyBased ? (
                                 <span className="text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
@@ -596,17 +596,17 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                               )}
                             </div>
                           </td>
-                          <td className="px-3.5 py-3 border-r border-slate-200 font-normal">
-                            <div className="text-base font-normal text-slate-900 leading-snug">
+                          <td className="px-3.5 py-3 border-r border-slate-200">
+                            <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                               {`${item.itemName} ${item.spec}`}
                             </div>
                             {item.purpose && (
-                              <div className="text-xs font-normal text-slate-500 mt-0.5 leading-snug truncate max-w-[240px]">
+                              <div className="text-xs text-slate-500 mt-0.5 leading-snug truncate max-w-[240px]">
                                 {item.purpose}
                               </div>
                             )}
                           </td>
-                          <td className="px-3.5 py-3 border-r border-slate-200 text-slate-700 font-normal">
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-slate-800 font-medium">
                             {item.vendorName}
                           </td>
                           {/* 로그인 아이디(ID) 칼럼 (수령담당자 좌측) */}

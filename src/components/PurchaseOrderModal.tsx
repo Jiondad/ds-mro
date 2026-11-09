@@ -443,9 +443,9 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                       <td className="px-2.5 py-2.5 border-r border-slate-300 text-center font-bold text-slate-800">
                         {it.line}
                       </td>
-                      <td className="px-2.5 py-2.5 border-r border-slate-300 font-normal text-slate-900">
-                        <div className="text-base font-normal leading-snug">{it.itemName}</div>
-                        <div className="text-xs font-normal text-slate-500 font-mono mt-0.5 leading-snug">{it.spec}</div>
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 font-medium text-slate-900">
+                        <div className="text-sm sm:text-base font-medium leading-snug">{it.itemName}</div>
+                        <div className="text-xs text-slate-500 font-mono mt-0.5 leading-snug">{it.spec}</div>
                       </td>
                       <td className="px-2.5 py-2.5 border-r border-slate-300 text-right font-extrabold text-blue-700 font-mono text-base">
                         {formatNumber(packQty)}

@@ -755,15 +755,15 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                       {/* 3. 카테고리 */}
                       <td className="px-3.5 py-3 border-r border-slate-200 whitespace-nowrap">
-                        <span className="font-bold text-slate-800 text-sm">
+                        <span className="font-medium text-slate-800 text-sm">
                           {item.categoryName}
                         </span>
                       </td>
 
                       {/* 4. 품목명 / 규격 (거래처·환산기준) */}
-                      <td className="px-3.5 py-3 border-r border-slate-200 whitespace-nowrap font-normal">
+                      <td className="px-3.5 py-3 border-r border-slate-200 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-base font-normal text-slate-900 leading-snug">
+                          <span className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                             {`${item.itemName} ${item.spec}`}
                           </span>
                           {item.isAuditDelayed && (
@@ -775,10 +775,10 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5 font-normal leading-snug flex items-center gap-1.5">
-                          <span className="font-normal text-slate-600">{item.vendorName}</span>
+                        <div className="text-xs text-slate-500 mt-0.5 leading-snug flex items-center gap-1.5">
+                          <span className="text-slate-700">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
-                          <span className="font-mono font-normal text-slate-500">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
+                          <span className="font-mono text-slate-500">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
                         </div>
                       </td>
 
@@ -1075,11 +1075,11 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                   {/* Card Middle: Item Name + Spec */}
                   <div className="py-1">
-                    <div className="text-base font-normal text-slate-900 leading-snug">
+                    <div className="text-base font-medium text-slate-900 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
                     {item.purpose && (
-                      <p className="text-[11px] font-normal text-slate-500 mt-0.5 line-clamp-1">
+                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
                         {item.purpose}
                       </p>
                     )}

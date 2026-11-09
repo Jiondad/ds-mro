@@ -964,11 +964,11 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                                 {item.line}
                               </span>
                             </td>
-                            <td className="p-3 font-normal">
-                              <div className="text-base font-normal text-slate-900 leading-snug">
+                            <td className="p-3">
+                              <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                                 {`${item.itemName} ${item.spec}`}
                               </div>
-                              <div className="text-xs font-normal text-slate-500 flex items-center gap-1.5 mt-0.5 leading-snug">
+                              <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 leading-snug">
                                 <span>용도: {item.purpose || item.moqDescription}</span>
                                 {item.isQtyBased && (
                                   <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -1119,7 +1119,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
                         {/* Middle: Item Name + Spec */}
                         <div className="pl-6 py-1">
-                          <div className="text-sm font-normal text-slate-900 leading-snug">
+                          <div className="text-sm font-medium text-slate-900 leading-snug">
                             {item.itemName} {item.spec}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -1412,11 +1412,11 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             {item.line}
                           </span>
                         </td>
-                        <td className="py-3 px-3.5 text-slate-700 font-semibold whitespace-nowrap">
+                        <td className="py-3 px-3.5 text-slate-800 font-medium whitespace-nowrap">
                           {item.categoryName}
                         </td>
-                        <td className="py-3 px-3.5 whitespace-nowrap font-normal">
-                          <div className="text-base font-normal text-slate-900 leading-snug">
+                        <td className="py-3 px-3.5 whitespace-nowrap">
+                          <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                             {item.itemName} {item.spec}
                           </div>
                         </td>
@@ -1509,7 +1509,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             {item.vendorName}
                           </span>
                         </div>
-                        <div className="text-sm font-normal text-slate-900 mt-1 leading-snug">
+                        <div className="text-sm font-medium text-slate-900 mt-1 leading-snug">
                           {item.itemName} {item.spec}
                         </div>
                       </div>
@@ -1707,8 +1707,8 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                           {rec.line}
                         </span>
                       </td>
-                      <td className="py-3 px-3.5 whitespace-nowrap font-normal">
-                        <div className="text-base font-normal text-slate-900 leading-snug">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                           {rec.itemName} {rec.spec}
                         </div>
                       </td>
@@ -1798,7 +1798,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                           {rec.status}
                         </span>
                       </div>
-                      <div className="text-sm font-normal text-slate-900 mt-1 leading-snug">
+                      <div className="text-sm font-medium text-slate-900 mt-1 leading-snug">
                         {rec.itemName} {rec.spec}
                       </div>
                     </div>

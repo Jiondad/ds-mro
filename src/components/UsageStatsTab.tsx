@@ -1244,11 +1244,11 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                           {stat.item.line}
                         </span>
                       </td>
-                      <td className="py-3 px-3.5 text-slate-700 font-semibold whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-slate-800 font-medium whitespace-nowrap">
                         {stat.item.categoryName}
                       </td>
-                      <td className="py-3 px-3.5 whitespace-nowrap font-normal">
-                        <div className="text-base font-normal text-slate-900 leading-snug">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
                           {stat.item.itemName} {stat.item.spec}
                         </div>
                       </td>
@@ -1361,7 +1361,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                         </span>
                         <span className="text-xs text-slate-500">{stat.item.categoryName}</span>
                       </div>
-                      <div className="text-sm font-normal text-slate-900 mt-1 leading-snug">
+                      <div className="text-sm font-medium text-slate-900 mt-1 leading-snug">
                         {stat.item.itemName} {stat.item.spec}
                       </div>
                     </div>
