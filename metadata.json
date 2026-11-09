@@ -1,0 +1,6 @@
+{
+  "name": "대성스틸 소모품 재고 실사 & 자동 발주 시스템",
+  "description": "철강 코일센터(SL1, SL2, 아산SL, 공용 포장장) 소모품 주간 재고 실사, 안전재고 잔여일수 자동 계산 및 거래처별 자동 발주서 발행 ERP 솔루션",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
