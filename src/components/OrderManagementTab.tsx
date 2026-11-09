@@ -903,34 +903,34 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
                 {/* Items Table (Desktop: md+) */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-xs text-left border-collapse">
+                  <table className="w-full text-sm text-left border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                        <th className="p-3 w-10 text-center">
+                      <tr className="bg-slate-50 text-slate-800 font-bold border-b border-slate-200 text-sm">
+                        <th className="p-3 w-12 text-center">
                           <input
                             type="checkbox"
                             checked={allVisibleSelected}
                             onChange={() =>
                               handleToggleAllForVendor(vendor.id, displayedItems)
                             }
-                            className="rounded text-blue-600 focus:ring-blue-500"
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
                             title="표시된 품목 전체 선택/해제"
                           />
                         </th>
-                        <th className="p-3 w-16 text-center">라인</th>
-                        <th className="p-3 min-w-[200px]">품목명 (규격)</th>
-                        <th className="p-3 text-center w-20">발주상태</th>
-                        <th className="p-3 text-right w-24">현재재고</th>
-                        <th className="p-3 text-right w-24">잔여일수</th>
-                        <th className="p-3 text-right w-36 bg-blue-50/50 text-blue-950">
+                        <th className="p-3 w-20 text-center">라인</th>
+                        <th className="p-3 min-w-[220px]">품목명 (규격)</th>
+                        <th className="p-3 text-center w-24">발주상태</th>
+                        <th className="p-3 text-right w-28">현재재고</th>
+                        <th className="p-3 text-right w-28">잔여일수</th>
+                        <th className="p-3 text-right w-40 bg-blue-50/50 text-blue-950">
                           발주수량(포장단위)
                         </th>
-                        <th className="p-3 text-right w-28">환산 기본수량</th>
-                        <th className="p-3 text-right w-24">단가</th>
-                        <th className="p-3 text-right w-28">공급가액</th>
+                        <th className="p-3 text-right w-32">환산 기본수량</th>
+                        <th className="p-3 text-right w-28">단가</th>
+                        <th className="p-3 text-right w-32">공급가액</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 font-medium">
+                    <tbody className="divide-y divide-slate-200 font-medium text-sm">
                       {displayedItems.map((item) => {
                         const isSelected = cfg.selectedItemIds.includes(item.id);
                         const currentQty =
@@ -956,22 +956,22 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                                 onChange={() =>
                                   handleToggleItem(vendor.id, item.id)
                                 }
-                                className="rounded text-blue-600 focus:ring-blue-500"
+                                className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
                               />
                             </td>
                             <td className="p-3 text-center">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800">
+                              <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-800">
                                 {item.line}
                               </span>
                             </td>
-                            <td className="p-3">
-                              <div className="text-sm font-bold text-slate-900">
+                            <td className="p-3 font-normal">
+                              <div className="text-base font-normal text-slate-900 leading-snug">
                                 {`${item.itemName} ${item.spec}`}
                               </div>
-                              <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                              <div className="text-xs font-normal text-slate-500 flex items-center gap-1.5 mt-0.5 leading-snug">
                                 <span>용도: {item.purpose || item.moqDescription}</span>
                                 {item.isQtyBased && (
-                                  <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
                                     수량기준 ({item.triggerPackQty}{item.packUnit}↓)
                                   </span>
                                 )}
@@ -981,28 +981,28 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             {/* 3-tier Urgency Status Badge */}
                             <td className="p-3 text-center whitespace-nowrap">
                               {item.orderStatus === '발주완료(입고대기)' ? (
-                                <span className="px-1.5 py-0.5 bg-sky-100 text-sky-900 rounded font-bold text-[10px] border border-sky-300">
+                                <span className="px-2 py-0.5 bg-sky-100 text-sky-900 rounded font-bold text-xs border border-sky-300">
                                   입고대기중
                                 </span>
                               ) : item.orderUrgency === 'urgent' ? (
-                                <span className="px-2 py-0.5 bg-rose-600 text-white rounded font-extrabold text-[10px] shadow-xs">
+                                <span className="px-2.5 py-0.5 bg-rose-600 text-white rounded font-extrabold text-xs shadow-xs">
                                   필요
                                 </span>
                               ) : item.orderUrgency === 'warning' ? (
-                                <span className="px-2 py-0.5 bg-amber-500 text-slate-950 rounded font-extrabold text-[10px] shadow-xs">
+                                <span className="px-2.5 py-0.5 bg-amber-500 text-slate-950 rounded font-extrabold text-xs shadow-xs">
                                   임박
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-medium text-[10px] border border-slate-300">
+                                <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded font-medium text-xs border border-slate-300">
                                   여유
                                 </span>
                               )}
                             </td>
 
-                            <td className="p-3 text-right font-mono">
+                            <td className="p-3 text-right font-mono font-bold text-slate-900 text-base">
                               {formatNumber(item.currentPackStock)} {item.packUnit}
                             </td>
-                            <td className="p-3 text-right font-mono font-bold">
+                            <td className="p-3 text-right font-mono font-black text-base">
                               {item.isQtyBased && item.dailyUsage === 0 ? (
                                 <span className="text-slate-400 font-mono text-xs font-normal">
                                   - (수량기준)
@@ -1013,8 +1013,8 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                                     item.needsOrder
                                       ? 'text-rose-600'
                                       : item.isOrderImminent
-                                      ? 'text-amber-700 font-bold'
-                                      : 'text-slate-700 font-medium'
+                                      ? 'text-amber-700 font-extrabold'
+                                      : 'text-slate-800 font-bold'
                                   }
                                 >
                                   {item.remainingDays === 999
@@ -1024,8 +1024,8 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                               )}
                             </td>
                             {/* Pack Order Qty Input */}
-                            <td className="p-2 text-right bg-blue-50/30">
-                              <div className="flex items-center justify-end gap-1">
+                            <td className="p-2.5 text-right bg-blue-50/30">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <input
                                   type="number"
                                   min="1"
@@ -1038,24 +1038,24 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                                     )
                                   }
                                   disabled={!isSelected}
-                                  className={`w-16 p-1 text-right text-xs font-black font-mono border rounded shadow-inner ${
+                                  className={`w-20 p-1.5 text-right text-base font-black font-mono border rounded shadow-inner ${
                                     isSelected
                                       ? 'text-blue-900 bg-white border-blue-400 focus:ring-2 focus:ring-blue-500'
                                       : 'text-slate-400 bg-slate-100 border-slate-300 cursor-not-allowed'
                                   }`}
                                 />
-                                <span className="text-[11px] text-slate-600 font-bold w-8 text-left">
+                                <span className="text-xs text-slate-600 font-bold w-9 text-left">
                                   {item.packUnit}
                                 </span>
                               </div>
                             </td>
-                            <td className="p-3 text-right font-mono font-bold text-slate-800">
+                            <td className="p-3 text-right font-mono font-bold text-slate-800 text-sm">
                               {formatNumber(baseQty)} {item.baseUnit}
                             </td>
-                            <td className="p-3 text-right font-mono text-slate-600">
+                            <td className="p-3 text-right font-mono text-slate-600 text-sm">
                               {formatNumber(item.unitPrice)}원
                             </td>
-                            <td className="p-3 text-right font-mono font-bold text-blue-800">
+                            <td className="p-3 text-right font-mono font-extrabold text-blue-800 text-base">
                               {formatNumber(amount)}원
                             </td>
                           </tr>
@@ -1119,7 +1119,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
                         {/* Middle: Item Name + Spec */}
                         <div className="pl-6 py-1">
-                          <div className="text-sm font-bold text-slate-900 leading-snug">
+                          <div className="text-sm font-normal text-slate-900 leading-snug">
                             {item.itemName} {item.spec}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -1359,23 +1359,23 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
           <>
             {/* Desktop Table (hidden md:block) */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-100 border-b border-slate-200 font-bold text-slate-700">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="bg-slate-100 border-b border-slate-200 font-bold text-slate-800 text-sm">
                   <tr>
-                    <th className="py-2.5 px-3 text-center w-12 whitespace-nowrap">No.</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">발주일자</th>
-                    <th className="py-2.5 px-3 text-center whitespace-nowrap">입고예정일</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">라인</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">카테고리</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap min-w-[200px]">품목명 &amp; 규격</th>
-                    <th className="py-2.5 px-3 whitespace-nowrap">거래처</th>
-                    <th className="py-2.5 px-3 text-right whitespace-nowrap">발주수량(포장·환산)</th>
-                    <th className="py-2.5 px-3 text-right whitespace-nowrap">발주금액</th>
-                    <th className="py-2.5 px-3 text-center whitespace-nowrap">납품장소</th>
-                    <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[190px]">관리 액션</th>
+                    <th className="py-3 px-3.5 text-center w-14 whitespace-nowrap">No.</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">발주일자</th>
+                    <th className="py-3 px-3.5 text-center whitespace-nowrap">입고예정일</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">라인</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">카테고리</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 &amp; 규격</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap">거래처</th>
+                    <th className="py-3 px-3.5 text-right whitespace-nowrap">발주수량(포장·환산)</th>
+                    <th className="py-3 px-3.5 text-right whitespace-nowrap">발주금액</th>
+                    <th className="py-3 px-3.5 text-center whitespace-nowrap">납품장소</th>
+                    <th className="py-3 px-3.5 text-center whitespace-nowrap min-w-[210px]">관리 액션</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-200 text-sm">
                   {awaitingItems.map((item, idx) => {
                     const packQty = item.orderedPackQty || 1;
                     const baseQty = packQty * (item.unitConversion || 1);
@@ -1383,19 +1383,19 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
                     return (
                       <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-400 whitespace-nowrap">
+                        <td className="py-3 px-3.5 text-center font-mono text-slate-400 whitespace-nowrap">
                           {idx + 1}
                         </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-800 font-bold whitespace-nowrap">
+                        <td className="py-3 px-3.5 font-mono text-slate-800 font-bold whitespace-nowrap">
                           {item.orderDate || item.lastOrderDate || TODAY_STR}
                         </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-sky-50 border border-sky-200">
+                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-sky-50 border border-sky-200">
                             <span className="font-mono font-bold text-blue-900">
                               {item.expectedArrivalDate || '-'}
                             </span>
                             <span
-                              className={`px-1.5 py-0.2 rounded font-extrabold text-[10px] leading-tight ${
+                              className={`px-1.5 py-0.5 rounded font-extrabold text-xs leading-tight ${
                                 item.dDayStatus === 'today'
                                   ? 'bg-red-600 text-white animate-pulse'
                                   : item.dDayStatus === 'overdue'
@@ -1407,51 +1407,51 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             </span>
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800">
+                        <td className="py-3 px-3.5 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-800">
                             {item.line}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                        <td className="py-3 px-3.5 text-slate-700 font-semibold whitespace-nowrap">
                           {item.categoryName}
                         </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <div className="text-sm font-bold text-slate-900">
+                        <td className="py-3 px-3.5 whitespace-nowrap font-normal">
+                          <div className="text-base font-normal text-slate-900 leading-snug">
                             {item.itemName} {item.spec}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        <td className="py-3 px-3.5 whitespace-nowrap">
+                          <span className="font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200 text-xs">
                             {item.vendorName}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono whitespace-nowrap">
-                          <span className="font-bold text-slate-900 text-xs">
+                        <td className="py-3 px-3.5 text-right font-mono whitespace-nowrap">
+                          <span className="font-extrabold text-slate-900 text-base">
                             {packQty} {item.packUnit}
                           </span>
-                          <span className="text-[10px] text-slate-400 block">
+                          <span className="text-xs text-slate-500 block">
                             (환산 {formatNumber(baseQty)} {item.baseUnit})
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
+                        <td className="py-3 px-3.5 text-right font-mono font-extrabold text-blue-700 text-base whitespace-nowrap">
                           {formatCurrency(totalAmount)}원
                         </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
+                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200">
                             {item.deliveryDetailLocation || item.deliveryLocation || '포승공장 출하1번홈'}
                           </span>
                           {item.receiverName && (
-                            <span className="text-[10px] text-slate-500 block mt-0.5 font-medium">
+                            <span className="text-xs text-slate-500 block mt-0.5 font-medium">
                               수령: {item.receiverName}{item.receiverPhone ? ` (${item.receiverPhone})` : ''}
                             </span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1">
+                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => setEditingOrderItem(item)}
-                              className="px-2 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors shadow-2xs"
+                              className="px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors shadow-2xs"
                               title="발주일자/입고예정일/발주수량 수정"
                             >
                               수정
@@ -1459,7 +1459,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             <button
                               type="button"
                               onClick={() => handleCopySingleItemKakao(item)}
-                              className="px-2 py-1 text-[11px] font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors shadow-2xs"
+                              className="px-2.5 py-1 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors shadow-2xs"
                               title="카카오톡/문자용 발주내용 복사"
                             >
                               카톡
@@ -1467,7 +1467,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenSingleItemPO(item)}
-                              className="px-2 py-1 text-[11px] font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors shadow-2xs"
+                              className="px-2.5 py-1 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors shadow-2xs"
                               title="발주서(PO) 다시 인쇄"
                             >
                               인쇄
@@ -1475,7 +1475,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             <button
                               type="button"
                               onClick={() => handleCancelSingleOrder(item)}
-                              className="px-2 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors shadow-2xs"
+                              className="px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors shadow-2xs"
                               title="발주 취소 (발주대기로 복구)"
                             >
                               발주취소
@@ -1509,7 +1509,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                             {item.vendorName}
                           </span>
                         </div>
-                        <div className="text-sm font-bold text-slate-900 mt-1">
+                        <div className="text-sm font-normal text-slate-900 mt-1 leading-snug">
                           {item.itemName} {item.spec}
                         </div>
                       </div>
@@ -1658,27 +1658,27 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
         {/* History Table Desktop (hidden md:block) */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100 border-b border-slate-200 font-bold text-slate-700">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="bg-slate-100 border-b border-slate-200 font-bold text-slate-800 text-sm">
               <tr>
-                <th className="py-2.5 px-3 text-center w-12 whitespace-nowrap">No.</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">발주일자</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">입고(예정)일</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">거래처</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">라인</th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[200px]">품목명 &amp; 규격</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap">발주수량</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap">총금액</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap">납품장소</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap">상태</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">비고</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-20">관리</th>
+                <th className="py-3 px-3.5 text-center w-14 whitespace-nowrap">No.</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">발주일자</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">입고(예정)일</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">거래처</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">라인</th>
+                <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 &amp; 규격</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap">발주수량</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap">총금액</th>
+                <th className="py-3 px-3.5 text-center whitespace-nowrap">납품장소</th>
+                <th className="py-3 px-3.5 text-center whitespace-nowrap">상태</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">비고</th>
+                <th className="py-3 px-3.5 text-center whitespace-nowrap w-24">관리</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-200 text-sm">
               {filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-slate-400">
+                  <td colSpan={12} className="py-10 text-center text-slate-400">
                     조건에 해당하는 발주 이력이 없습니다.
                   </td>
                 </tr>
@@ -1686,46 +1686,46 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                 filteredHistory.map((rec, idx) => {
                   return (
                     <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-2.5 px-3 text-center font-mono text-slate-400 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center font-mono text-slate-400 whitespace-nowrap">
                         {idx + 1}
                       </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-mono font-bold text-slate-800 whitespace-nowrap">
                         {rec.orderDate}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-mono text-slate-600 whitespace-nowrap">
                         {rec.completedDate
                           ? `${rec.completedDate} (${rec.status === '입고완료' ? '입고' : '취소'})`
                           : `${rec.expectedArrivalDate} (예정)`}
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        <span className="font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200 text-xs">
                           {rec.vendorName}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-800">
                           {rec.line}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <div className="text-sm font-bold text-slate-900">
+                      <td className="py-3 px-3.5 whitespace-nowrap font-normal">
+                        <div className="text-base font-normal text-slate-900 leading-snug">
                           {rec.itemName} {rec.spec}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-base text-slate-900 whitespace-nowrap">
                         {rec.orderedPackQty} {rec.packUnit}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-base text-slate-900 whitespace-nowrap">
                         {formatCurrency(rec.totalAmount)}원
                       </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-900 border border-amber-200">
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                        <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200">
                           {rec.deliveryLocation || '포승공장 출하1번홈'}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 text-xs font-bold rounded ${
+                          className={`px-2.5 py-1 text-xs font-bold rounded ${
                             rec.status === '입고대기'
                               ? 'bg-sky-100 text-sky-800 border border-sky-300'
                               : rec.status === '입고완료'
@@ -1736,26 +1736,26 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                           {rec.status}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 max-w-xs truncate" title={rec.note || ''}>
+                      <td className="py-3 px-3.5 text-slate-500 max-w-xs truncate text-xs" title={rec.note || ''}>
                         {rec.note || '-'}
                       </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => setEditingHistoryRecord(rec)}
                             title="이력 수정"
-                            className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded transition-colors"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteHistory(rec.id, rec.itemName)}
                             title="이력 삭제"
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition-colors"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -1798,7 +1798,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                           {rec.status}
                         </span>
                       </div>
-                      <div className="text-sm font-bold text-slate-900 mt-1">
+                      <div className="text-sm font-normal text-slate-900 mt-1 leading-snug">
                         {rec.itemName} {rec.spec}
                       </div>
                     </div>

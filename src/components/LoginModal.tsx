@@ -7,6 +7,7 @@ interface LoginModalProps {
   onLogin: (user: UserAccount) => void;
   onOpenPasswordChange?: () => void;
   userPasswords?: Record<string, string>;
+  registeredUsers?: UserAccount[];
 }
 
 // 사내 등록된 표준 계정 데이터베이스 (실무형)
@@ -21,6 +22,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onLogin,
   onOpenPasswordChange,
   userPasswords = {},
+  registeredUsers = SYSTEM_USERS,
 }) => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('1234');
@@ -32,8 +34,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
-    // 간단한 인증 검증 로직 (실무 환경에서는 백엔드 연동)
-    const found = SYSTEM_USERS.find((u) => u.username === username.trim());
+    const trimmedId = username.trim();
+    const userPool = registeredUsers.length > 0 ? registeredUsers : SYSTEM_USERS;
+    const found = userPool.find((u) => u.username === trimmedId);
     if (!found) {
       setErrorMsg('등록되지 않은 아이디이거나 권한이 없습니다.');
       return;
@@ -42,7 +45,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const customPassword = userPasswords[found.username];
     const isPasswordValid = customPassword
       ? password === customPassword
-      : password === '1234' || password === 'admin123!';
+      : password === '1234' || (found.username === 'admin' && password === 'admin123!');
 
     if (!isPasswordValid) {
       setErrorMsg('비밀번호가 일치하지 않습니다.');
@@ -80,7 +83,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="아이디를 입력하세요"
+                placeholder="아이디를 입력하세요 (예: admin, field_sl1)"
                 required
                 className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 font-medium bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
@@ -95,7 +98,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호 입력"
+                placeholder="비밀번호 입력 (신규/초기화 계정: 1234)"
                 required
                 className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 font-mono bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />

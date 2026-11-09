@@ -1194,32 +1194,32 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
 
         {/* Desktop Table (hidden lg:block) */}
         <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-100 border-b border-slate-200 font-bold text-slate-700">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="bg-slate-100 border-b border-slate-200 font-bold text-slate-800 text-sm">
               <tr>
-                <th className="py-2.5 px-3 text-center w-12 whitespace-nowrap">No.</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">라인</th>
-                <th className="py-2.5 px-3 whitespace-nowrap">카테고리</th>
-                <th className="py-2.5 px-3 whitespace-nowrap min-w-[200px]">품목명 및 규격</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap">기간 총 사용량(포장)</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap">기간 소모 금액</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap">기준 일소모량(현재)</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap bg-blue-50/50 text-blue-900">
+                <th className="py-3 px-3.5 text-center w-14 whitespace-nowrap">No.</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">라인</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">카테고리</th>
+                <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 및 규격</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap">기간 총 사용량(포장)</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap">기간 소모 금액</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap">기준 일소모량(현재)</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap bg-blue-50/50 text-blue-900">
                   실제 일평균 소모량
                 </th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap">소모 편차율</th>
-                <th className="py-2.5 px-3 text-right whitespace-nowrap bg-indigo-50/70 text-indigo-950">
+                <th className="py-3 px-3.5 text-center whitespace-nowrap">소모 편차율</th>
+                <th className="py-3 px-3.5 text-right whitespace-nowrap bg-indigo-50/70 text-indigo-950">
                   [추천 보정값] (안전재고 학습)
                 </th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap min-w-[185px]">
+                <th className="py-3 px-3.5 text-center whitespace-nowrap min-w-[195px]">
                   원클릭 마스터 보정
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-200 text-sm">
               {displayedStatsList.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-10 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     조건에 일치하는 품목이 없습니다. 필터를 변경해주세요.
                   </td>
                 </tr>
@@ -1236,74 +1236,74 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                           : 'hover:bg-slate-50'
                       }`}
                     >
-                      <td className="py-2.5 px-3 text-center font-mono text-slate-400 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center font-mono text-slate-400 whitespace-nowrap">
                         {idx + 1}
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800">
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-800">
                           {stat.item.line}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-slate-700 font-semibold whitespace-nowrap">
                         {stat.item.categoryName}
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <div className="text-sm font-bold text-slate-900">
+                      <td className="py-3 px-3.5 whitespace-nowrap font-normal">
+                        <div className="text-base font-normal text-slate-900 leading-snug">
                           {stat.item.itemName} {stat.item.spec}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-base text-slate-900 whitespace-nowrap">
                         {formatNumber(stat.totalPackUsed)} {stat.item.packUnit}
-                        <span className="text-[10px] text-slate-400 font-normal ml-1">
+                        <span className="text-xs text-slate-500 font-normal ml-1">
                           ({formatNumber(stat.totalBaseUsed)}{stat.item.baseUnit})
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-base text-blue-700 whitespace-nowrap">
                         {formatCurrency(stat.totalCost)}원
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
                         <div>{formatNumber(stat.item.dailyUsage)} {stat.item.baseUnit}/일</div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-xs text-slate-500 font-normal">
                           안전재고: {formatNumber(stat.item.safetyStockBase)}{stat.item.baseUnit}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold bg-blue-50/40 text-blue-900 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-base bg-blue-50/40 text-blue-900 whitespace-nowrap">
                         {formatNumber(stat.actualDailyUsage)} {stat.item.baseUnit}/일
                       </td>
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         {stat.status === 'urgent_high' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-300">
                             소모 급증 ▲ (+{stat.deviationPct}%)
                           </span>
                         ) : stat.status === 'urgent_low' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-extrabold bg-sky-100 text-sky-800 border border-sky-300">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-extrabold bg-sky-100 text-sky-800 border border-sky-300">
                             소모 감소 ▼ ({stat.deviationPct}%)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             적정 ({stat.deviationPct > 0 ? '+' : ''}{stat.deviationPct}%)
                           </span>
                         )}
                       </td>
                       {/* [추천 보정값] Column */}
-                      <td className="py-2.5 px-3 text-right font-mono bg-indigo-50/40 whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-right font-mono bg-indigo-50/40 whitespace-nowrap">
                         {hasDeviationWarning ? (
                           <div>
-                            <div className="font-black text-indigo-900 text-xs">
+                            <div className="font-black text-indigo-900 text-sm">
                               추천: {formatNumber(stat.recommendedDailyUsage)} {stat.item.baseUnit}/일
                             </div>
-                            <div className="text-[10px] text-indigo-700 font-semibold">
+                            <div className="text-xs text-indigo-700 font-semibold">
                               권장 안전재고: {formatNumber(stat.recommendedSafetyStockBase)}{stat.item.baseUnit} ({stat.recommendedSafetyPackStock}{stat.item.packUnit})
                             </div>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-400 font-sans">
+                          <span className="text-xs text-slate-500 font-sans">
                             현행 유지 ({formatNumber(stat.item.dailyUsage)}{stat.item.baseUnit}/일)
                           </span>
                         )}
                       </td>
                       {/* Action Column */}
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         {hasDeviationWarning ? (
                           <button
                             type="button"
@@ -1316,14 +1316,14 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                                 stat.item.baseUnit
                               )
                             }
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-2xs transition-all cursor-pointer active:scale-95"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-2xs transition-all cursor-pointer active:scale-95"
                             title={`기준 일소모량(${stat.item.dailyUsage})을 추천 보정값(${stat.recommendedDailyUsage})으로 즉시 업데이트`}
                           >
-                            <RefreshCw className="w-3 h-3" />
+                            <RefreshCw className="w-3.5 h-3.5" />
                             <span>추천값으로 일소모량 개별 반영</span>
                           </button>
                         ) : (
-                          <span className="text-[11px] text-slate-400 font-medium">
+                          <span className="text-xs text-slate-400 font-medium">
                             보정 불필요 (±20% 이내)
                           </span>
                         )}
@@ -1361,7 +1361,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                         </span>
                         <span className="text-xs text-slate-500">{stat.item.categoryName}</span>
                       </div>
-                      <div className="text-sm font-bold text-slate-900 mt-1">
+                      <div className="text-sm font-normal text-slate-900 mt-1 leading-snug">
                         {stat.item.itemName} {stat.item.spec}
                       </div>
                     </div>

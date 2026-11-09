@@ -45,6 +45,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
   const [purpose, setPurpose] = useState<string>('');
   const [triggerPackQty, setTriggerPackQty] = useState<string>('');
   const [fixedOrderPackQty, setFixedOrderPackQty] = useState<string>('');
+  const [receiverLoginId, setReceiverLoginId] = useState<string>('');
   const [receiverName, setReceiverName] = useState<string>('');
   const [receiverPhone, setReceiverPhone] = useState<string>('');
   const [deliveryDetailLocation, setDeliveryDetailLocation] = useState<string>('');
@@ -78,6 +79,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
           ? String(editingItem.fixedOrderPackQty)
           : ''
       );
+      setReceiverLoginId(editingItem.receiverLoginId || '');
       setReceiverName(editingItem.receiverName || '');
       setReceiverPhone(editingItem.receiverPhone || '');
       setDeliveryDetailLocation(editingItem.deliveryDetailLocation || '');
@@ -99,6 +101,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
       setPurpose('');
       setTriggerPackQty('');
       setFixedOrderPackQty('');
+      setReceiverLoginId('');
       setReceiverName('');
       setReceiverPhone('');
       setDeliveryDetailLocation('');
@@ -143,6 +146,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
         triggerPackQty.trim() !== '' ? Number(triggerPackQty) : null,
       fixedOrderPackQty:
         fixedOrderPackQty.trim() !== '' ? Number(fixedOrderPackQty) : null,
+      receiverLoginId: receiverLoginId.trim() || undefined,
       receiverName: receiverName.trim() || undefined,
       receiverPhone: receiverPhone.trim() || undefined,
       deliveryDetailLocation: deliveryDetailLocation.trim() || undefined,
@@ -484,19 +488,32 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             </div>
           </div>
 
-          {/* Row 7: 현장 수령 담당자 & 세부 하역위치 */}
+          {/* Row 7: 현장 수령 담당자 & 세부 하역위치 & 로그인 아이디 연동 */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
-                현장 수령 담당자 &amp; 납품장소 (발주서 자동연동)
+                현장 사용자 계정 연동 &amp; 수령 담당자 / 납품장소
               </span>
-              <span className="text-[11px] text-slate-500">
-                미입력 시 공장 기본담당자 및 카테고리 납품장소가 적용됩니다.
+              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                품목 마스터 등록 계정은 자동으로 &apos;현장 사용자(LV.1)&apos; 권한 · 초기 PW &apos;1234&apos; 부여
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1 text-xs">
+                  로그인 아이디 (ID) <span className="text-[10px] font-bold text-blue-600">(현장사용자)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="예: field_sl1 (초기PW: 1234)"
+                  value={receiverLoginId}
+                  onChange={(e) => setReceiverLoginId(e.target.value)}
+                  className="w-full border border-blue-300 rounded-lg p-2 text-xs text-slate-900 bg-white font-mono font-bold focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
               <div>
                 <label className="block text-slate-700 font-semibold mb-1 text-xs">
                   현장 수령 담당자명 / 직급
@@ -529,7 +546,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder={selectedCategory?.deliveryLocation || "예: SL1 작업대 1번"}
+                  placeholder={selectedCategory?.deliveryLocation || '예: SL1 작업대 1번'}
                   value={deliveryDetailLocation}
                   onChange={(e) => setDeliveryDetailLocation(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-500"

@@ -31,7 +31,7 @@ import { UsageStatsTab } from './components/UsageStatsTab';
 import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { NewItemModal } from './components/NewItemModal';
 import { EditOrderModal } from './components/EditOrderModal';
-import { LoginModal } from './components/LoginModal';
+import { LoginModal, SYSTEM_USERS } from './components/LoginModal';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { DbConfigModal } from './components/DbConfigModal';
 import { getSavedSupabaseConfig } from './lib/supabase';
@@ -128,6 +128,7 @@ export default function App() {
             ...it,
             lastAuditDate:
               it.lastAuditDate !== undefined ? it.lastAuditDate : initMatch?.lastAuditDate ?? null,
+            receiverLoginId: it.receiverLoginId || initMatch?.receiverLoginId,
             receiverName: it.receiverName || initMatch?.receiverName,
             receiverPhone: it.receiverPhone || initMatch?.receiverPhone,
             deliveryDetailLocation: it.deliveryDetailLocation || initMatch?.deliveryDetailLocation,
@@ -331,6 +332,38 @@ export default function App() {
     });
   }, [items, categories, vendors]);
 
+  // 품목 마스터(receiverLoginId)에서 등록/생성된 계정을 자동으로 '현장 사용자(LV.1)' 권한으로 연동
+  const registeredUsers: UserAccount[] = useMemo(() => {
+    const map = new Map<string, UserAccount>();
+    SYSTEM_USERS.forEach((u) => map.set(u.username, u));
+
+    items.forEach((it) => {
+      const loginId = it.receiverLoginId?.trim();
+      if (!loginId || map.has(loginId)) return;
+      map.set(loginId, {
+        id: `usr_field_${loginId}`,
+        username: loginId,
+        name: it.receiverName
+          ? `${it.receiverName} (${it.line})`
+          : `현장사용자 (${loginId})`,
+        level: 1, // 품목 마스터 등록 계정은 자동으로 '현장 사용자(LV.1)' 권한 부여
+        roleLabel: 'LV.1 현장사용자',
+      });
+    });
+
+    return Array.from(map.values());
+  }, [items]);
+
+  // 현장 사용자(LV.1) 또는 초기화된 계정이 초기 비밀번호('1234') 상태인 경우 로그인 직후 비밀번호 변경 강제
+  const mustChangePassword = useMemo(() => {
+    if (!currentUser) return false;
+    const storedPw = userPasswords[currentUser.username];
+    const isPassword1234 = !storedPw || storedPw === '1234';
+    if (!isPassword1234) return false;
+    // 현장 사용자(LV.1)이거나 최고관리자에 의해 '1234'로 초기화된 계정인 경우 강제
+    return currentUser.level === 1 || storedPw === '1234';
+  }, [currentUser, userPasswords]);
+
   // Counts for header badges
   const orderNeededCount = calculatedItems.filter((i) => i.needsOrder).length;
   const awaitingArrivalCount = calculatedItems.filter(
@@ -369,9 +402,18 @@ export default function App() {
       setIsWorkerMode(false);
     }
 
+    const storedPw = userPasswords[user.username];
+    const isInitialOrReset = (!storedPw || storedPw === '1234') && (user.level === 1 || storedPw === '1234');
+
     const roleText = user.roleLabel || `LV.${user.level}`;
     const displayName = user.title ? `${user.name} ${user.title}` : user.name;
-    showToast(`[${roleText}] ${displayName} 계정으로 로그인되었습니다.`);
+    if (isInitialOrReset) {
+      showToast(
+        `⚠️ [${displayName}] 초기 비밀번호(1234) 상태입니다. 새 비밀번호로 변경해 주세요.`
+      );
+    } else {
+      showToast(`[${roleText}] ${displayName} 계정으로 로그인되었습니다.`);
+    }
   };
 
   const handleLogout = () => {
@@ -381,6 +423,7 @@ export default function App() {
         : currentUser.name
       : '';
     setCurrentUser(null);
+    setIsPasswordChangeOpen(false);
     try {
       localStorage.removeItem(STORAGE_KEY_CURRENT_USER);
     } catch (e) {
@@ -404,6 +447,27 @@ export default function App() {
       return updated;
     });
     showToast(`'${username}' 계정의 비밀번호가 사내 보안 정책에 따라 변경되었습니다.`);
+  };
+
+  // LV.0 최고관리자 전용: 특정 현장 사용자의 비밀번호를 다시 '1234'로 초기화
+  const handleResetUserPassword = (username: string, displayName?: string) => {
+    if ((currentUser?.level ?? 0) !== 0) {
+      showToast('⚠️ 비밀번호 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
+      return;
+    }
+    setUserPasswords((prev) => {
+      const updated = { ...prev, [username]: '1234' };
+      try {
+        localStorage.setItem(STORAGE_KEY_USER_PASSWORDS, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save reset password to localStorage', e);
+      }
+      return updated;
+    });
+    const label = displayName ? `${displayName} (${username})` : username;
+    showToast(
+      `🔑 [비밀번호 초기화 완료] '${label}' 계정의 비밀번호가 '1234'로 초기화되었습니다. (다음 로그인 시 변경 강제)`
+    );
   };
 
   // RBAC-guarded tab navigation

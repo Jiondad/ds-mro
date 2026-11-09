@@ -628,81 +628,81 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
         {/* Scrollable Compact Table (Desktop: md+) */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse table-auto">
+          <table className="w-full text-sm text-left border-collapse table-auto">
             <thead>
-              <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300 select-none whitespace-nowrap">
+              <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 select-none whitespace-nowrap text-sm">
                 {/* 1. No. (행번) */}
-                <th className="px-3 py-2 border-r border-slate-200 text-center w-12 text-slate-500 font-mono">
+                <th className="px-3.5 py-3 border-r border-slate-200 text-center w-14 text-slate-500 font-mono">
                   No.
                 </th>
 
                 {/* 2. 라인 */}
                 <th
                   onClick={() => handleHeaderSort('default')}
-                  className="px-3 py-2 border-r border-slate-200 w-16 text-center cursor-pointer hover:bg-slate-200"
+                  className="px-3.5 py-3 border-r border-slate-200 w-20 text-center cursor-pointer hover:bg-slate-200"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>라인</span>
                     {sortField === 'default' && (
-                      <span className="text-[10px] text-blue-600 font-bold">(고정)</span>
+                      <span className="text-xs text-blue-600 font-bold">(고정)</span>
                     )}
                   </div>
                 </th>
 
                 {/* 3. 카테고리 (신규 독립 컬럼) */}
-                <th className="px-3 py-2 border-r border-slate-200 w-28 text-left whitespace-nowrap min-w-[110px]">
+                <th className="px-3.5 py-3 border-r border-slate-200 w-32 text-left whitespace-nowrap min-w-[120px]">
                   카테고리
                 </th>
 
                 {/* 4. 품목명 / 규격 (거래처·환산기준) */}
                 <th
                   onClick={() => handleHeaderSort('itemName')}
-                  className="px-3 py-2 border-r border-slate-200 min-w-[200px] cursor-pointer hover:bg-slate-200"
+                  className="px-3.5 py-3 border-r border-slate-200 min-w-[220px] cursor-pointer hover:bg-slate-200"
                 >
                   <div className="flex items-center gap-1">
                     <span>품목명 / 규격 (거래처·환산기준)</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                 </th>
 
                 {/* 5. 현재 실사재고 입력 (핵심 컬럼) */}
-                <th className="px-3 py-2 border-r border-slate-200 text-center bg-yellow-50 text-yellow-950 w-44">
+                <th className="px-3.5 py-3 border-r border-slate-200 text-center bg-yellow-50 text-yellow-950 w-52">
                   현재 실사재고 입력
                 </th>
 
                 {/* 6. 환산재고 (독립 컬럼) */}
-                <th className="px-3 py-2 border-r border-slate-200 text-right w-24 whitespace-nowrap">
+                <th className="px-3.5 py-3 border-r border-slate-200 text-right w-28 whitespace-nowrap">
                   환산재고
                 </th>
 
                 {/* 7. 잔여일 (독립 컬럼) */}
                 <th
                   onClick={() => handleHeaderSort('remainingDays')}
-                  className="px-3 py-2 border-r border-slate-200 text-right w-20 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
+                  className="px-3.5 py-3 border-r border-slate-200 text-right w-24 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
                 >
                   <div className="flex items-center justify-end gap-1">
                     <span>잔여일</span>
-                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                 </th>
 
                 {/* 8. 발주·입고 상태 (독립 컬럼) */}
-                <th className="px-3 py-2 border-r border-slate-200 text-center min-w-[150px] whitespace-nowrap">
+                <th className="px-3.5 py-3 border-r border-slate-200 text-center min-w-[170px] whitespace-nowrap">
                   발주·입고 상태
                 </th>
 
                 {/* 9. 입고확정 처리 (독립 액션 컬럼) */}
-                <th className="px-3 py-2 min-w-[280px] text-left whitespace-nowrap">
+                <th className="px-3.5 py-3 min-w-[300px] text-left whitespace-nowrap">
                   입고확정 처리
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 font-medium">
+            <tbody className="divide-y divide-slate-200 font-medium text-sm">
               {sortedItems.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-400 whitespace-nowrap">
-                    <p className="text-sm font-semibold">조건에 맞는 품목이 없습니다.</p>
-                    <p className="text-xs mt-1">필터를 초기화하거나 검색어를 변경해주세요.</p>
+                    <p className="text-base font-semibold">조건에 맞는 품목이 없습니다.</p>
+                    <p className="text-sm mt-1">필터를 초기화하거나 검색어를 변경해주세요.</p>
                   </td>
                 </tr>
               ) : (
@@ -742,61 +742,61 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       }`}
                     >
                       {/* 1. No. (행번) */}
-                      <td className="px-3 py-2 border-r border-slate-200 text-center font-mono text-slate-400 text-xs">
+                      <td className="px-3.5 py-3 border-r border-slate-200 text-center font-mono text-slate-400 text-sm">
                         {idx + 1}
                       </td>
 
                       {/* 2. 라인 */}
-                      <td className="px-3 py-2 border-r border-slate-200 text-center whitespace-nowrap">
-                        <span className={`${getLineTextColor(item.line)} text-xs font-semibold`}>
+                      <td className="px-3.5 py-3 border-r border-slate-200 text-center whitespace-nowrap">
+                        <span className={`${getLineTextColor(item.line)} text-sm font-bold`}>
                           {getLineShortLabel(item.line)}
                         </span>
                       </td>
 
                       {/* 3. 카테고리 */}
-                      <td className="px-3 py-2 border-r border-slate-200 whitespace-nowrap">
-                        <span className="font-bold text-slate-800 text-xs">
+                      <td className="px-3.5 py-3 border-r border-slate-200 whitespace-nowrap">
+                        <span className="font-bold text-slate-800 text-sm">
                           {item.categoryName}
                         </span>
                       </td>
 
                       {/* 4. 품목명 / 규격 (거래처·환산기준) */}
-                      <td className="px-3 py-2 border-r border-slate-200 whitespace-nowrap">
+                      <td className="px-3.5 py-3 border-r border-slate-200 whitespace-nowrap font-normal">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-slate-900">
+                          <span className="text-base font-normal text-slate-900 leading-snug">
                             {`${item.itemName} ${item.spec}`}
                           </span>
                           {item.isAuditDelayed && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-orange-100 text-orange-800 border border-orange-300">
-                              <AlertTriangle className="w-2.5 h-2.5 text-orange-600" />
+                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-xs font-extrabold bg-orange-100 text-orange-800 border border-orange-300">
+                              <AlertTriangle className="w-3 h-3 text-orange-600" />
                               {item.daysSinceLastAudit !== null
                                 ? `실사지연 (${item.daysSinceLastAudit}일경과)`
                                 : '실사누락'}
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-slate-500 mt-0.5 leading-tight flex items-center gap-1">
-                          <span className="font-medium text-slate-600">{item.vendorName}</span>
+                        <div className="text-xs text-slate-500 mt-0.5 font-normal leading-snug flex items-center gap-1.5">
+                          <span className="font-normal text-slate-600">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
-                          <span className="font-mono text-slate-400">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
+                          <span className="font-mono font-normal text-slate-500">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
                         </div>
                       </td>
 
                       {/* 5. 현재 실사재고 입력 (핵심 컬럼: 세로 일직선 정렬 & 방향키 이동 & Draft) */}
                       <td
-                        className={`px-3 py-1.5 border-r border-slate-200 text-center transition-colors ${
+                        className={`px-3.5 py-2.5 border-r border-slate-200 text-center transition-colors ${
                           isDraftChanged ? 'bg-amber-100/60' : 'bg-yellow-50/30'
                         }`}
                       >
-                        <div className="inline-flex items-center justify-center gap-1">
+                        <div className="inline-flex items-center justify-center gap-1.5">
                           {/* Decrement Button */}
                           <button
                             type="button"
                             onClick={() => handleStepDraftStock(item, -1)}
-                            className="w-7 h-7 bg-white hover:bg-yellow-100 border border-yellow-300 rounded flex items-center justify-center font-bold text-slate-700 text-sm shadow-2xs active:scale-95 transition-transform cursor-pointer"
+                            className="w-8 h-8 bg-white hover:bg-yellow-100 border border-yellow-300 rounded flex items-center justify-center font-bold text-slate-700 text-sm shadow-2xs active:scale-95 transition-transform cursor-pointer"
                             title="1 차감"
                           >
-                            <Minus className="w-3.5 h-3.5" />
+                            <Minus className="w-4 h-4" />
                           </button>
 
                           {/* Yellow Input Box */}
@@ -813,7 +813,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                               )
                             }
                             onKeyDown={(e) => handleInputKeyDown(e, idx)}
-                            className={`w-20 px-1 py-1 text-center font-bold font-mono rounded text-sm shadow-inner transition-colors ${
+                            className={`w-22 px-1.5 py-1.5 text-center font-black font-mono rounded text-base shadow-inner transition-colors ${
                               isDraftChanged
                                 ? 'bg-amber-200 text-amber-950 border-2 border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500'
                                 : 'bg-yellow-100 hover:bg-yellow-200 text-slate-950 border border-yellow-400 focus:bg-white focus:ring-2 focus:ring-yellow-500'
@@ -824,21 +824,21 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                           <button
                             type="button"
                             onClick={() => handleStepDraftStock(item, +1)}
-                            className="w-7 h-7 bg-white hover:bg-yellow-100 border border-yellow-300 rounded flex items-center justify-center font-bold text-slate-700 text-sm shadow-2xs active:scale-95 transition-transform cursor-pointer"
+                            className="w-8 h-8 bg-white hover:bg-yellow-100 border border-yellow-300 rounded flex items-center justify-center font-bold text-slate-700 text-sm shadow-2xs active:scale-95 transition-transform cursor-pointer"
                             title="1 증가"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-4 h-4" />
                           </button>
 
                           {/* Dynamic Pack Unit */}
-                          <span className="text-[11px] text-slate-700 font-semibold w-8 text-left pl-1 shrink-0">
+                          <span className="text-xs text-slate-700 font-bold w-9 text-left pl-1 shrink-0">
                             {item.packUnit}
                           </span>
                         </div>
 
                         {/* Status feedback indicator underneath the input */}
                         {isDraftChanged ? (
-                          <div className="mt-1 flex items-center justify-center gap-1 text-[10px]">
+                          <div className="mt-1 flex items-center justify-center gap-1 text-xs">
                             <span className="px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 font-extrabold shadow-2xs">
                               변경됨
                             </span>
@@ -847,7 +847,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             </span>
                           </div>
                         ) : item.isAuditDelayed ? (
-                          <div className="mt-1 flex items-center justify-center gap-1 text-[10px]">
+                          <div className="mt-1 flex items-center justify-center gap-1 text-xs">
                             <span className="text-orange-700 font-bold font-mono">
                               {item.lastAuditDate
                                 ? `지연 (${item.lastAuditDate.slice(5, 10)})`
@@ -857,7 +857,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onConfirmAuditWithoutChange([item.id])}
-                                className="px-1.5 py-0.2 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
                                 title="수량 변동 없이 금일 실사 완료 처리"
                               >
                                 실사확인
@@ -865,31 +865,31 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             )}
                           </div>
                         ) : item.lastAuditDate ? (
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5 text-center">
+                          <div className="text-xs text-slate-500 font-mono mt-0.5 text-center">
                             최근실사: {item.lastAuditDate.replace(TODAY_STR + ' ', '')}
                           </div>
                         ) : null}
                       </td>
 
                       {/* 6. 환산재고 (독립 컬럼) */}
-                      <td className="px-3 py-2 border-r border-slate-200 text-right whitespace-nowrap">
-                        <span className="font-bold text-blue-700 font-mono text-xs">
+                      <td className="px-3.5 py-3 border-r border-slate-200 text-right whitespace-nowrap">
+                        <span className="font-extrabold text-blue-700 font-mono text-base">
                           {formatNumber(draftBaseStock)} {item.baseUnit}
                         </span>
                       </td>
 
                       {/* 7. 잔여일 (독립 컬럼) */}
-                      <td className="px-3 py-2 border-r border-slate-200 text-right whitespace-nowrap font-mono text-xs">
+                      <td className="px-3.5 py-3 border-r border-slate-200 text-right whitespace-nowrap font-mono text-base">
                         {item.isQtyBased && item.dailyUsage === 0 ? (
-                          <span className="text-slate-400 font-sans text-[11px]">- (수량기준)</span>
+                          <span className="text-slate-400 font-sans text-xs">- (수량기준)</span>
                         ) : (
                           <span
                             className={
                               draftRemainingDays <= (item.safetyStockBase / (item.dailyUsage || 1))
-                                ? 'text-rose-600 font-bold'
+                                ? 'text-rose-600 font-black'
                                 : item.isOrderImminent
-                                ? 'text-amber-700 font-bold'
-                                : 'text-slate-800'
+                                ? 'text-amber-700 font-extrabold'
+                                : 'text-slate-800 font-bold'
                             }
                           >
                             {draftRemainingDays === 999 ? '999일+' : `${draftRemainingDays.toFixed(1)}일`}
@@ -898,45 +898,45 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       </td>
 
                       {/* 8. 발주·입고 상태 (독립 컬럼) */}
-                      <td className="px-3 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-3.5 py-3 border-r border-slate-200 text-center whitespace-nowrap">
                         {isAwaiting ? (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[11px] shadow-2xs">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-xs shadow-2xs">
                             <span>입고대기</span>
-                            <span className="font-mono text-[10px] text-sky-700">
+                            <span className="font-mono text-xs text-sky-700">
                               ({formatShortDate(item.expectedArrivalDate)} · {item.dDayText})
                             </span>
                           </div>
                         ) : item.needsOrder ? (
-                          <div className="inline-flex items-center gap-1">
-                            <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[11px] shadow-2xs">
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="px-2.5 py-1 rounded bg-rose-600 text-white font-extrabold text-xs shadow-2xs">
                               발주요망
                             </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
+                            <span className="text-xs text-slate-500 font-mono font-semibold">
                               (권장: {item.recommendedPackOrderQty} {item.packUnit})
                             </span>
                           </div>
                         ) : item.isOrderImminent ? (
-                          <div className="inline-flex items-center gap-1">
-                            <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-[11px] shadow-2xs">
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-extrabold text-xs shadow-2xs">
                               발주임박
                             </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
+                            <span className="text-xs text-slate-500 font-mono font-semibold">
                               (권장: {item.recommendedPackOrderQty} {item.packUnit})
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-xs">여유(정상)</span>
+                          <span className="text-slate-500 text-sm font-medium">여유(정상)</span>
                         )}
                       </td>
 
                       {/* 9. 입고확정 처리 (독립 액션 컬럼) */}
-                      <td className="px-3 py-2 whitespace-nowrap text-left">
+                      <td className="px-3.5 py-3 whitespace-nowrap text-left">
                         {isAwaiting ? (
                           /* 입고대기 중일 때: 이번 입고량 입력 및 합산 입고확정 버튼 */
                           <div className="flex items-center gap-2">
                             {/* 이번 입고량 입력칸 */}
                             <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[11px] text-slate-600 font-medium">
+                              <span className="text-xs text-slate-600 font-semibold">
                                 이번입고:
                               </span>
                               <input
@@ -950,9 +950,9 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                                     Number(e.target.value) || 0
                                   )
                                 }
-                                className="w-14 px-1 py-0.5 text-center text-xs font-bold font-mono text-amber-900 bg-white border border-amber-400 rounded focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                className="w-16 px-1.5 py-1 text-center text-sm font-bold font-mono text-amber-900 bg-white border border-amber-400 rounded focus:ring-1 focus:ring-amber-500 shadow-2xs"
                               />
-                              <span className="text-[11px] text-slate-600 font-medium">
+                              <span className="text-xs text-slate-600 font-semibold">
                                 {item.packUnit}
                               </span>
                             </div>
@@ -961,17 +961,17 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenReceiveModal(item)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                               title="현재 실사재고와 이번 입고량을 확인 후 전산에 확정 반영합니다"
                             >
-                              <Check className="w-3.5 h-3.5" />
+                              <Check className="w-4 h-4" />
                               <span>
                                 합산 입고확정 (총 {calculatedFinalStock}{item.packUnit})
                               </span>
                             </button>
                           </div>
                         ) : (
-                          <span className="text-slate-300 font-mono text-xs pl-2">-</span>
+                          <span className="text-slate-300 font-mono text-sm pl-2">-</span>
                         )}
                       </td>
                     </tr>
@@ -1075,11 +1075,11 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                   {/* Card Middle: Item Name + Spec */}
                   <div className="py-1">
-                    <div className="text-base font-bold text-slate-900 leading-snug">
+                    <div className="text-base font-normal text-slate-900 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
                     {item.purpose && (
-                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+                      <p className="text-[11px] font-normal text-slate-500 mt-0.5 line-clamp-1">
                         {item.purpose}
                       </p>
                     )}

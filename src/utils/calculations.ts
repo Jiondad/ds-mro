@@ -121,6 +121,7 @@ export function calculateItemMetrics(
       item.deliveryDetailLocation ||
       category?.deliveryLocation ||
       (isAsanLine(item.line) ? '아산공장 SL라인 진입부' : '포승공장 출하1번홈 (공용포장장)'),
+    receiverLoginId: item.receiverLoginId,
     receiverName: item.receiverName,
     receiverPhone: item.receiverPhone,
     deliveryDetailLocation: item.deliveryDetailLocation,

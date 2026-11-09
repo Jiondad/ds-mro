@@ -19,6 +19,8 @@ import {
   Search,
   X,
   Save,
+  KeyRound,
+  UserCheck,
 } from 'lucide-react';
 
 interface MasterDataTabProps {
@@ -27,6 +29,9 @@ interface MasterDataTabProps {
   vendors: Vendor[];
   units: Unit[];
   companyProfile?: CompanyProfile;
+  currentUserLevel?: number;
+  userPasswords?: Record<string, string>;
+  onResetUserPassword?: (username: string, displayName?: string) => void;
   onUpdateCategory: (cat: Category) => void;
   onAddCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
@@ -49,6 +54,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   vendors,
   units,
   companyProfile,
+  currentUserLevel = 0,
+  userPasswords = {},
+  onResetUserPassword,
   onUpdateCategory,
   onAddCategory,
   onDeleteCategory,
@@ -140,6 +148,48 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
     return new Map(categories.map((c, idx) => [c.id, idx]));
   }, [categories]);
 
+  // Unique field user accounts derived from Item Master (+ default field1)
+  const linkedFieldAccounts = useMemo(() => {
+    const map = new Map<
+      string,
+      { loginId: string; receiverName: string; receiverPhone?: string; lines: Set<string>; itemCount: number }
+    >();
+
+    // Default field1 operator account
+    map.set('field1', {
+      loginId: 'field1',
+      receiverName: '현장실사 담당자 (기본)',
+      lines: new Set(['공통']),
+      itemCount: 0,
+    });
+
+    items.forEach((it) => {
+      const id = it.receiverLoginId?.trim();
+      if (!id) return;
+      const existing = map.get(id);
+      if (existing) {
+        existing.lines.add(it.line);
+        existing.itemCount += 1;
+        if (!existing.receiverName && it.receiverName) {
+          existing.receiverName = it.receiverName;
+        }
+        if (!existing.receiverPhone && it.receiverPhone) {
+          existing.receiverPhone = it.receiverPhone;
+        }
+      } else {
+        map.set(id, {
+          loginId: id,
+          receiverName: it.receiverName || '현장 담당자',
+          receiverPhone: it.receiverPhone,
+          lines: new Set([it.line]),
+          itemCount: 1,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [items]);
+
   // Sort items strictly according to 3-tier fixed order: 라인 > 카테고리 > 품목명
   const sortedMasterItems = useMemo(() => {
     return [...items]
@@ -151,7 +201,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
           it.spec.toLowerCase().includes(q) ||
           it.vendorName.toLowerCase().includes(q) ||
           it.categoryName.toLowerCase().includes(q) ||
-          it.line.toLowerCase().includes(q)
+          it.line.toLowerCase().includes(q) ||
+          (it.receiverLoginId && it.receiverLoginId.toLowerCase().includes(q)) ||
+          (it.receiverName && it.receiverName.toLowerCase().includes(q))
         );
       })
       .sort((a, b) => compareItemsByDefaultOrder(a, b, categoryOrderMap));
@@ -255,7 +307,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
             기준정보 (Master Data) 통합 관리
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            소모품 품목 마스터(라인·규격·단위환산), 카테고리별 안전일수 및 발주주기, 공급업체 정보 환경설정
+            소모품 품목 마스터(라인·규격·단위환산·현장계정 연동), 카테고리별 안전일수 및 발주주기, 공급업체 정보 환경설정
           </p>
         </div>
 
@@ -343,6 +395,91 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
       {/* Sub Tab 0: Inventory Item Master */}
       {activeSubTab === 'item' && (
         <div className="space-y-3">
+          {/* LV.0 Super Admin Field User Account & Password Reset Management Bar */}
+          {currentUserLevel === 0 && (
+            <div className="bg-slate-900 text-white p-3.5 rounded-xl border border-slate-800 shadow-xs space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                    <UserCheck className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
+                      <span>품목 마스터 연동 현장 사용자 계정 관리</span>
+                      <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded">
+                        LV.0 최고관리자 전용
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-300">
+                      품목 마스터에 등록된 로그인 아이디(ID)는 자동으로 <strong>&apos;현장 사용자(LV.1)&apos;</strong> 권한 및 초기 비밀번호 <strong>&apos;1234&apos;</strong>로 설정됩니다. 초기화 시 다음 로그인 때 비밀번호 변경이 강제됩니다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 pt-1">
+                {linkedFieldAccounts.map((acc) => {
+                  const customPw = userPasswords[acc.loginId];
+                  const isInitial1234 = !customPw || customPw === '1234';
+                  return (
+                    <div
+                      key={acc.loginId}
+                      className="bg-slate-800/90 border border-slate-700 rounded-lg px-3 py-2 flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-black text-xs text-blue-300 truncate">
+                            {acc.loginId}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 shrink-0">
+                            현장사용자
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-200 font-semibold truncate mt-0.5">
+                          {acc.receiverName}{' '}
+                          <span className="text-slate-400 font-normal">
+                            ({Array.from(acc.lines).join('/')})
+                          </span>
+                        </div>
+                        <div className="mt-0.5">
+                          {isInitial1234 ? (
+                            <span className="text-[10px] font-bold text-amber-300">
+                              ● 초기PW (1234 · 변경강제)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-emerald-400">
+                              ● 본인 PW 변경완료
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {onResetUserPassword && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `'${acc.receiverName} (${acc.loginId})' 현장 사용자 계정의 비밀번호를 초기 비밀번호('1234')로 초기화하시겠습니까?\n\n초기화 후 해당 사용자가 다음 로그인 시 새 비밀번호 변경이 강제됩니다.`
+                              )
+                            ) {
+                              onResetUserPassword(acc.loginId, acc.receiverName);
+                            }
+                          }}
+                          className="px-2 py-1.5 rounded-md text-[11px] font-extrabold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+                          title="비밀번호를 '1234'로 초기화 (다음 로그인 시 변경 강제)"
+                        >
+                          <KeyRound className="w-3 h-3" />
+                          <span>PW 초기화</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-white p-3 rounded-lg border border-slate-200">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-800">
@@ -359,7 +496,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
                 <input
                   type="text"
-                  placeholder="품목·규격·라인 검색..."
+                  placeholder="품목·규격·라인·아이디 검색..."
                   value={itemSearchQuery}
                   onChange={(e) => setItemSearchQuery(e.target.value)}
                   className="w-full text-xs border border-slate-300 rounded-md pl-8 pr-2 py-1.5 bg-white text-slate-900 focus:ring-1 focus:ring-blue-500"
@@ -380,138 +517,202 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
 
           <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse table-auto whitespace-nowrap">
+              <table className="w-full text-sm text-left border-collapse table-auto whitespace-nowrap">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 select-none">
-                    <th className="px-3 py-2 border-r border-slate-200 text-center w-12 text-slate-500 font-mono">
+                  <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200 select-none text-sm">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-center w-14 text-slate-500 font-mono">
                       No.
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 text-center w-16">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-center w-20">
                       라인
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 w-32">
+                    <th className="px-3.5 py-3 border-r border-slate-200 w-36">
                       카테고리
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 min-w-[200px]">
+                    <th className="px-3.5 py-3 border-r border-slate-200 min-w-[220px]">
                       품목명 (규격)
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 w-28">
+                    <th className="px-3.5 py-3 border-r border-slate-200 w-32">
                       공급업체
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 min-w-[140px]">
+                    <th className="px-3.5 py-3 border-r border-slate-200 min-w-[175px] bg-blue-50/60 text-blue-950">
+                      로그인 아이디(ID)
+                    </th>
+                    <th className="px-3.5 py-3 border-r border-slate-200 min-w-[150px]">
                       수령담당자 (연락처)
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 min-w-[160px]">
+                    <th className="px-3.5 py-3 border-r border-slate-200 min-w-[170px]">
                       납품처 (하역위치)
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 text-center w-28">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-center w-32">
                       입고단위 환산
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 text-right w-24">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-right w-28">
                       일소모량
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 text-right w-24">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-right w-28">
                       단가
                     </th>
-                    <th className="px-3 py-2 border-r border-slate-200 text-center w-20">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-center w-24">
                       납기
                     </th>
-                    <th className="px-3 py-2 text-center w-20">
+                    <th className="px-3.5 py-3 text-center w-24">
                       관리
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
+                <tbody className="divide-y divide-slate-200 font-medium text-sm">
                   {sortedMasterItems.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-10 text-center text-slate-400">
+                      <td colSpan={13} className="py-12 text-center text-slate-400">
                         등록된 품목이 없습니다.
                       </td>
                     </tr>
                   ) : (
-                    sortedMasterItems.map((item, idx) => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 border-r border-slate-200 text-center font-mono text-slate-400">
-                          {idx + 1}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-center font-bold text-slate-800">
-                          {item.line}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-slate-700 whitespace-nowrap">
-                          <div className="font-semibold">{item.categoryName}</div>
-                          <div className="text-[10px] mt-0.5">
-                            {item.isQtyBased ? (
-                              <span className="text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded">
-                                수량기준 ({item.triggerPackQty}{item.packUnit} 이하)
-                              </span>
-                            ) : (
-                              <span className="text-blue-800 font-medium bg-blue-50 border border-blue-200 px-1 py-0.2 rounded">
-                                일수기준
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200">
-                          <div className="text-sm font-bold text-slate-900">
-                            {`${item.itemName} ${item.spec}`}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-slate-700">
-                          {item.vendorName}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-slate-800">
-                          {item.receiverName ? (
-                            <div>
-                              <span className="font-bold text-slate-900">{item.receiverName}</span>
-                              {item.receiverPhone && (
-                                <span className="block text-[11px] font-mono text-slate-500">
-                                  {item.receiverPhone}
+                    sortedMasterItems.map((item, idx) => {
+                      const loginId = item.receiverLoginId?.trim();
+                      const customPw = loginId ? userPasswords[loginId] : undefined;
+                      const isInitial1234 = !customPw || customPw === '1234';
+
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-center font-mono text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-center font-bold text-slate-800">
+                            {item.line}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-slate-700 whitespace-nowrap">
+                            <div className="font-bold text-slate-800">{item.categoryName}</div>
+                            <div className="text-xs mt-0.5">
+                              {item.isQtyBased ? (
+                                <span className="text-emerald-800 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                                  수량기준 ({item.triggerPackQty}{item.packUnit} 이하)
+                                </span>
+                              ) : (
+                                <span className="text-blue-800 font-medium bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded">
+                                  일수기준
                                 </span>
                               )}
                             </div>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 italic">공장 기본담당</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-slate-700">
-                          <span className="text-xs font-semibold text-slate-900">
-                            {item.deliveryDetailLocation || item.deliveryLocation || '-'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-center font-mono text-[11px] text-slate-600">
-                          1{item.packUnit} = {item.unitConversion}{item.baseUnit}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-right font-mono text-emerald-800">
-                          {formatNumber(item.dailyUsage)} {item.baseUnit}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-right font-mono text-slate-800">
-                          {formatNumber(item.unitPrice)}원
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-200 text-center font-mono text-slate-600">
-                          {item.leadTimeDays}일
-                        </td>
-                        <td className="px-3 py-2 text-center space-x-1">
-                          {onEditItem && (
-                            <button
-                              onClick={() => onEditItem(item)}
-                              title="품목 정보 수정"
-                              className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {onDeleteItem && (
-                            <button
-                              onClick={() => onDeleteItem(item.id)}
-                              title="품목 삭제"
-                              className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 font-normal">
+                            <div className="text-base font-normal text-slate-900 leading-snug">
+                              {`${item.itemName} ${item.spec}`}
+                            </div>
+                            {item.purpose && (
+                              <div className="text-xs font-normal text-slate-500 mt-0.5 leading-snug truncate max-w-[240px]">
+                                {item.purpose}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-slate-700 font-normal">
+                            {item.vendorName}
+                          </td>
+                          {/* 로그인 아이디(ID) 칼럼 (수령담당자 좌측) */}
+                          <td className="px-3.5 py-3 border-r border-slate-200 bg-blue-50/20">
+                            {loginId ? (
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-extrabold text-slate-900 text-sm">
+                                      {loginId}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                                      현장사용자
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] mt-0.5">
+                                    {isInitial1234 ? (
+                                      <span className="text-amber-700 font-bold">
+                                        초기PW: 1234 (변경대기)
+                                      </span>
+                                    ) : (
+                                      <span className="text-emerald-700 font-bold">
+                                        본인 PW 변경됨
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {currentUserLevel === 0 && onResetUserPassword && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (
+                                        confirm(
+                                          `'${item.receiverName || loginId} (${loginId})' 계정의 비밀번호를 '1234'로 초기화하시겠습니까?\n(다음 로그인 시 비밀번호 변경이 강제됩니다)`
+                                        )
+                                      ) {
+                                        onResetUserPassword(loginId, item.receiverName);
+                                      }
+                                    }}
+                                    title="이 현장 사용자 계정의 비밀번호를 '1234'로 초기화"
+                                    className="px-2 py-1 text-[11px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+                                  >
+                                    <KeyRound className="w-3 h-3" />
+                                    <span>PW초기화</span>
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">미지정 (수정 시 등록)</span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-slate-800">
+                            {item.receiverName ? (
+                              <div>
+                                <span className="font-bold text-slate-900">{item.receiverName}</span>
+                                {item.receiverPhone && (
+                                  <span className="block text-xs font-mono text-slate-500">
+                                    {item.receiverPhone}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">공장 기본담당</span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-slate-700">
+                            <span className="text-sm font-semibold text-slate-900">
+                              {item.deliveryDetailLocation || item.deliveryLocation || '-'}
+                            </span>
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-center font-mono text-xs text-slate-600">
+                            1{item.packUnit} = {item.unitConversion}{item.baseUnit}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-right font-mono font-bold text-emerald-800 text-base">
+                            {formatNumber(item.dailyUsage)} {item.baseUnit}
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-right font-mono font-bold text-slate-900 text-base">
+                            {formatNumber(item.unitPrice)}원
+                          </td>
+                          <td className="px-3.5 py-3 border-r border-slate-200 text-center font-mono text-slate-700 font-semibold">
+                            {item.leadTimeDays}일
+                          </td>
+                          <td className="px-3.5 py-3 text-center space-x-1">
+                            {onEditItem && (
+                              <button
+                                onClick={() => onEditItem(item)}
+                                title="품목 정보 수정"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {onDeleteItem && (
+                              <button
+                                onClick={() => onDeleteItem(item.id)}
+                                title="품목 삭제"
+                                className="p-1.5 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -644,27 +845,27 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
           {/* Category Table */}
           <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
+              <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                    <th className="p-2.5">카테고리명</th>
-                    <th className="p-2.5 text-center w-36">발주 기준 방식</th>
-                    <th className="p-2.5 text-center w-36">안전/기준 발주점</th>
-                    <th className="p-2.5 text-center w-36">발주주기 / 권장발주량</th>
-                    <th className="p-2.5 min-w-[210px]">납품장소 (수기 입력)</th>
-                    <th className="p-2.5">설명</th>
-                    <th className="p-2.5 text-center w-24">관리</th>
+                  <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200 text-sm">
+                    <th className="p-3">카테고리명</th>
+                    <th className="p-3 text-center w-40">발주 기준 방식</th>
+                    <th className="p-3 text-center w-40">안전/기준 발주점</th>
+                    <th className="p-3 text-center w-40">발주주기 / 권장발주량</th>
+                    <th className="p-3 min-w-[220px]">납품장소 (수기 입력)</th>
+                    <th className="p-3">설명</th>
+                    <th className="p-3 text-center w-24">관리</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
+                <tbody className="divide-y divide-slate-200 font-medium text-sm">
                   {categories.map((cat) => {
                     const isQty = cat.orderPolicyType === 'QTY_BASED';
 
                     return (
                       <tr key={cat.id} className="hover:bg-slate-50">
-                        <td className="p-2.5 font-bold text-slate-900">{cat.name}</td>
+                        <td className="p-3 font-extrabold text-base text-slate-900">{cat.name}</td>
 
-                        <td className="p-2 text-center">
+                        <td className="p-2.5 text-center">
                           <button
                             type="button"
                             onClick={() =>
@@ -673,7 +874,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                 orderPolicyType: isQty ? 'DAYS_BASED' : 'QTY_BASED',
                               })
                             }
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-2xs cursor-pointer ${
                               isQty
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
                                 : 'bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-200'
@@ -689,9 +890,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                           </button>
                         </td>
 
-                        <td className="p-2 text-center">
+                        <td className="p-2.5 text-center">
                           {isQty ? (
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex items-center gap-1.5">
                               <input
                                 type="number"
                                 min="1"
@@ -702,14 +903,14 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                     defaultTriggerPackQty: Number(e.target.value) || 1,
                                   })
                                 }
-                                className="w-16 p-1 text-center font-mono font-bold border border-emerald-300 rounded bg-emerald-50 text-xs text-emerald-950 focus:bg-white"
+                                className="w-18 p-1.5 text-center font-mono font-bold border border-emerald-300 rounded bg-emerald-50 text-sm text-emerald-950 focus:bg-white"
                               />
-                              <span className="text-emerald-800 font-semibold text-[11px]">
+                              <span className="text-emerald-800 font-semibold text-xs">
                                 포장 이하
                               </span>
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex items-center gap-1.5">
                               <input
                                 type="number"
                                 min="1"
@@ -721,16 +922,16 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                     safetyDays: Number(e.target.value) || 1,
                                   })
                                 }
-                                className="w-16 p-1 text-center font-mono font-bold border border-slate-300 rounded bg-white text-xs"
+                                className="w-18 p-1.5 text-center font-mono font-bold border border-slate-300 rounded bg-white text-sm"
                               />
-                              <span className="text-slate-500">일분</span>
+                              <span className="text-slate-600 text-xs">일분</span>
                             </div>
                           )}
                         </td>
 
-                        <td className="p-2 text-center">
+                        <td className="p-2.5 text-center">
                           {isQty ? (
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex items-center gap-1.5">
                               <input
                                 type="number"
                                 min="1"
@@ -741,9 +942,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                     defaultOrderPackQty: Number(e.target.value) || 1,
                                   })
                                 }
-                                className="w-16 p-1 text-center font-mono font-bold border border-emerald-300 rounded bg-emerald-50 text-xs text-emerald-950 focus:bg-white"
+                                className="w-18 p-1.5 text-center font-mono font-bold border border-emerald-300 rounded bg-emerald-50 text-sm text-emerald-950 focus:bg-white"
                               />
-                              <span className="text-emerald-800 font-semibold text-[11px]">
+                              <span className="text-emerald-800 font-semibold text-xs">
                                 포장 발주
                               </span>
                             </div>
@@ -756,7 +957,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                   orderCycleDays: Number(e.target.value) || 30,
                                 })
                               }
-                              className="p-1 border border-slate-300 rounded bg-white text-slate-800 font-medium text-xs"
+                              className="p-1.5 border border-slate-300 rounded bg-white text-slate-800 font-medium text-sm"
                             >
                               <option value={15}>15일 주기</option>
                               <option value={20}>20일 주기</option>
@@ -767,7 +968,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                           )}
                         </td>
 
-                        <td className="p-2">
+                        <td className="p-2.5">
                           <input
                             type="text"
                             value={cat.deliveryLocation || ''}
@@ -778,21 +979,21 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                 deliveryLocation: e.target.value,
                               })
                             }
-                            className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-900 bg-white font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm text-slate-900 bg-white font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                           />
                         </td>
 
-                        <td className="p-2.5 text-slate-500">
+                        <td className="p-3 text-slate-600 text-xs">
                           {cat.description || '-'}
                         </td>
-                        <td className="p-2.5 text-center whitespace-nowrap">
+                        <td className="p-3 text-center whitespace-nowrap">
                           <div className="inline-flex items-center gap-1 justify-center">
                             <button
                               onClick={() => setEditingCategory({ ...cat })}
                               title="카테고리 상세 정보 수정"
-                              className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
+                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
+                              <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => {
@@ -801,9 +1002,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                 }
                               }}
                               title="카테고리 삭제"
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -914,19 +1115,19 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
 
           <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
+              <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                    <th className="p-2.5">업체명</th>
-                    <th className="p-2.5 text-center w-28">기본납기(Lead Time)</th>
-                    <th className="p-2.5 w-32">담당자</th>
-                    <th className="p-2.5 w-36">연락처</th>
-                    <th className="p-2.5">이메일 / 주소</th>
-                    <th className="p-2.5 text-center w-24">거래상태</th>
-                    <th className="p-2.5 text-center w-20">관리</th>
+                  <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200 text-sm">
+                    <th className="p-3">업체명</th>
+                    <th className="p-3 text-center w-32">기본납기(Lead Time)</th>
+                    <th className="p-3 w-36">담당자</th>
+                    <th className="p-3 w-40">연락처</th>
+                    <th className="p-3">이메일 / 주소</th>
+                    <th className="p-3 text-center w-28">거래상태</th>
+                    <th className="p-3 text-center w-24">관리</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
+                <tbody className="divide-y divide-slate-200 font-medium text-sm">
                   {vendors.map((v) => (
                     <tr
                       key={v.id}
@@ -934,9 +1135,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                         !v.isActive ? 'opacity-60 bg-slate-100' : ''
                       }`}
                     >
-                      <td className="p-2.5 font-bold text-slate-900">{v.name}</td>
-                      <td className="p-2 text-center">
-                        <div className="inline-flex items-center gap-1">
+                      <td className="p-3 font-extrabold text-base text-slate-900">{v.name}</td>
+                      <td className="p-2.5 text-center">
+                        <div className="inline-flex items-center gap-1.5">
                           <input
                             type="number"
                             min="1"
@@ -948,21 +1149,21 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                 defaultLeadTime: Number(e.target.value) || 1,
                               })
                             }
-                            className="w-14 p-1 text-center font-mono font-bold border border-slate-300 rounded bg-white text-xs"
+                            className="w-16 p-1.5 text-center font-mono font-bold border border-slate-300 rounded bg-white text-sm"
                           />
-                          <span className="text-slate-500">일</span>
+                          <span className="text-slate-600 text-xs">일</span>
                         </div>
                       </td>
-                      <td className="p-2.5 text-slate-700">
+                      <td className="p-3 text-slate-800 font-semibold">
                         {v.contactPerson || '-'}
                       </td>
-                      <td className="p-2.5 text-slate-700 font-mono">
+                      <td className="p-3 text-slate-700 font-mono">
                         {v.phone || '-'}
                       </td>
-                      <td className="p-2.5 text-slate-500 truncate max-w-xs">
+                      <td className="p-3 text-slate-600 text-xs truncate max-w-xs">
                         {v.email} {v.address ? `· ${v.address}` : ''}
                       </td>
-                      <td className="p-2.5 text-center">
+                      <td className="p-3 text-center">
                         <button
                           onClick={() =>
                             onUpdateVendor({
@@ -970,7 +1171,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                               isActive: !v.isActive,
                             })
                           }
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold cursor-pointer transition-colors ${
                             v.isActive
                               ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                               : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
@@ -980,14 +1181,14 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                           {v.isActive ? '거래중' : '거래중단'}
                         </button>
                       </td>
-                      <td className="p-2.5 text-center whitespace-nowrap">
+                      <td className="p-3 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1 justify-center">
                           <button
                             onClick={() => setEditingVendor({ ...v })}
                             title="공급업체 정보 수정"
-                            className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => {
@@ -996,9 +1197,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                               }
                             }}
                             title="공급업체 삭제"
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>

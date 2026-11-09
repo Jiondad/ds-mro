@@ -78,6 +78,7 @@ export interface InventoryItem {
   purpose: string; // 용도 (예: 생산설비 세척, 내수제품포장, 목재파렛트 제조 등)
   triggerPackQty?: number | null; // 품목 개별 발주 기준 포장수량 (미지정 시 카테고리 기본값 사용)
   fixedOrderPackQty?: number | null; // 품목 개별 1회 고정 발주 포장수량 (미지정 시 카테고리 기본값 사용)
+  receiverLoginId?: string; // 품목별 현장 수령 담당자 로그인 아이디 (자동으로 LV.1 현장사용자 권한 부여)
   receiverName?: string; // 품목별 현장 수령 담당자명/직급 (예: '박현장 반장', '이아산 기장')
   receiverPhone?: string; // 품목별 현장 수령 담당자 연락처 (예: '010-8899-7721')
   deliveryDetailLocation?: string; // 품목별 세부 하역장소 오버라이드 (미입력 시 카테고리 납품장소 사용)
@@ -102,6 +103,7 @@ export interface CalculatedItem extends InventoryItem {
   triggerBaseQty: number; // 적용된 발주점 기본수량
   fixedOrderPackQty: number; // 적용된 1회 고정발주 포장수량
   deliveryLocation?: string; // 카테고리에서 상속된 납품장소 (또는 품목 세부 하역장소)
+  receiverLoginId?: string;
   receiverName?: string;
   receiverPhone?: string;
   deliveryDetailLocation?: string;

@@ -411,21 +411,21 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
 
           {/* Items Table */}
           <div className="mb-6 overflow-x-auto border border-slate-700">
-            <table className="w-full text-xs text-left border-collapse min-w-[700px] sm:min-w-full">
+            <table className="w-full text-sm text-left border-collapse min-w-[700px] sm:min-w-full">
               <thead>
-                <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-700">
-                  <th className="p-2 border-r border-slate-300 w-8 text-center">No</th>
-                  <th className="p-2 border-r border-slate-300 w-16 text-center">라인</th>
-                  <th className="p-2 border-r border-slate-300">품목명 (규격)</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-20">발주수량</th>
-                  <th className="p-2 border-r border-slate-300 text-center w-12">단위</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-20">단가(원)</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-24">공급가액(원)</th>
-                  <th className="p-2 border-r border-slate-300 min-w-[130px]">현장 수령담당 / 하역</th>
-                  <th className="p-2 text-center w-24">용도/비고</th>
+                <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-700 text-sm">
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 w-10 text-center">No</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 w-18 text-center">라인</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300">품목명 (규격)</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 text-right w-24">발주수량</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 text-center w-14">단위</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 text-right w-24">단가(원)</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 text-right w-28">공급가액(원)</th>
+                  <th className="px-2.5 py-2.5 border-r border-slate-300 min-w-[140px]">현장 수령담당 / 하역</th>
+                  <th className="px-2.5 py-2.5 text-center w-28">용도/비고</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-200 text-sm">
                 {items.map((it, idx) => {
                   const packQty = it.orderedPackQty || it.recommendedPackOrderQty;
                   const baseQty = packQty * it.unitConversion;
@@ -437,33 +437,33 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
 
                   return (
                     <tr key={it.id} className="hover:bg-slate-50">
-                      <td className="p-2 border-r border-slate-300 text-center text-slate-500 font-mono">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-center text-slate-500 font-mono">
                         {idx + 1}
                       </td>
-                      <td className="p-2 border-r border-slate-300 text-center font-semibold text-slate-700">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-center font-bold text-slate-800">
                         {it.line}
                       </td>
-                      <td className="p-2 border-r border-slate-300 font-bold text-slate-900">
-                        <div>{it.itemName}</div>
-                        <div className="text-[11px] font-normal text-slate-500 font-mono">{it.spec}</div>
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 font-normal text-slate-900">
+                        <div className="text-base font-normal leading-snug">{it.itemName}</div>
+                        <div className="text-xs font-normal text-slate-500 font-mono mt-0.5 leading-snug">{it.spec}</div>
                       </td>
-                      <td className="p-2 border-r border-slate-300 text-right font-bold text-blue-700 font-mono">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-right font-extrabold text-blue-700 font-mono text-base">
                         {formatNumber(packQty)}
                       </td>
-                      <td className="p-2 border-r border-slate-300 text-center text-slate-600">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-center text-slate-700 font-semibold">
                         {it.packUnit}
                       </td>
-                      <td className="p-2 border-r border-slate-300 text-right text-slate-700 font-mono">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-right text-slate-700 font-mono">
                         {formatNumber(it.unitPrice)}
                       </td>
-                      <td className="p-2 border-r border-slate-300 text-right font-bold text-slate-900 font-mono">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-right font-extrabold text-slate-900 font-mono text-base">
                         {formatNumber(itemAmount)}
                       </td>
-                      <td className="p-2 border-r border-slate-300 text-[11px] text-slate-700">
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 text-xs text-slate-700">
                         <div className="font-bold text-slate-900">{displayReceiver}</div>
                         <div className="text-slate-500 truncate">{displayLoc}</div>
                       </td>
-                      <td className="p-2 text-slate-500 text-[11px] truncate">
+                      <td className="px-2.5 py-2.5 text-slate-500 text-xs truncate">
                         {it.purpose || it.moqDescription}
                       </td>
                     </tr>
@@ -471,20 +471,20 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                 })}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-100 border-t-2 border-slate-700 font-bold text-slate-900">
-                  <td colSpan={3} className="p-2.5 text-center border-r border-slate-300">
+                <tr className="bg-slate-100 border-t-2 border-slate-700 font-bold text-slate-900 text-sm">
+                  <td colSpan={3} className="p-3 text-center border-r border-slate-300">
                     합 계 (Total Amount)
                   </td>
-                  <td colSpan={2} className="p-2.5 text-center border-r border-slate-300">
+                  <td colSpan={2} className="p-3 text-center border-r border-slate-300">
                     {items.length}개 품목
                   </td>
-                  <td className="p-2.5 text-right border-r border-slate-300 text-slate-600">
+                  <td className="p-3 text-right border-r border-slate-300 text-slate-600">
                     공급가
                   </td>
-                  <td className="p-2.5 text-right border-r border-slate-300 font-mono text-blue-700 text-sm">
+                  <td className="p-3 text-right border-r border-slate-300 font-mono font-extrabold text-blue-700 text-base">
                     {formatCurrency(subtotal)}
                   </td>
-                  <td colSpan={2} className="p-2.5 text-center text-[11px] text-slate-500">
+                  <td colSpan={2} className="p-3 text-center text-xs text-slate-500">
                     VAT 별도
                   </td>
                 </tr>
