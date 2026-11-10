@@ -12,11 +12,48 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/ds-mro/assets/index-BzIv9XP-.js"></script>
-    <link rel="stylesheet" crossorigin href="/ds-mro/assets/index-9wV9DYH6.css">
+    <script type="text/javascript">
+      // 정적 호스팅(404.html)에서 리다이렉트된 경우 원래 하위 경로 및 쿼리 파라미터를 즉시 복원합니다.
+      (function () {
+        try {
+          var raw = sessionStorage.getItem('__ds_mro_spa_redirect__');
+          if (!raw) return;
+          sessionStorage.removeItem('__ds_mro_spa_redirect__');
+          var data = JSON.parse(raw);
+          if (!data || Date.now() - (data.timestamp || 0) > 15000) return;
+
+          var pathname = data.pathname || '/';
+          var search = data.search || '';
+          var hash = data.hash || '';
+
+          // 하위 경로(예: /ds-mro/account-management 또는 /master-data)에서 탭 슬러그 추출
+          var cleanPath = pathname.replace(/^\/ds-mro\/?/, '/').replace(/^\/+|\/+$/g, '');
+          var validTabs = [
+            'dashboard',
+            'field-audit',
+            'order-sheet',
+            'master-data',
+            'stats',
+            'account-management'
+          ];
+          var segments = cleanPath ? cleanPath.split('/') : [];
+          var params = new URLSearchParams(search);
+
+          if (segments.length > 0 && validTabs.indexOf(segments[0]) !== -1 && !params.get('tab')) {
+            params.set('tab', segments[0]);
+          }
+
+          var basePath = pathname.indexOf('/ds-mro') === 0 ? '/ds-mro/' : '/';
+          var queryString = params.toString();
+          var restoredUrl = basePath + (queryString ? '?' + queryString : '') + hash;
+          window.history.replaceState(null, '', restoredUrl);
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/ds-mro/assets/index-D5sAyfvl.js"></script>
+    <link rel="stylesheet" crossorigin href="/ds-mro/assets/index-BoujGFs6.css">
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
     <div id="root"></div>
   </body>
 </html>
-
