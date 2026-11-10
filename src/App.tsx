@@ -170,7 +170,7 @@ export default function App() {
         }
       }
     } catch {}
-    return INITIAL_INVENTORY_ITEMS;
+    return []; // 👈 목업 대신 빈 배열로 시작
   });
 
   const [categories, setCategories] = useState<Category[]>(() => {
