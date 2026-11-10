@@ -13,15 +13,9 @@ import {
   Vendor,
 } from './types';
 import {
-  INITIAL_CATEGORIES,
   INITIAL_COMPANY_PROFILE,
-  INITIAL_INVENTORY_ITEMS,
   INITIAL_MEMO,
-  INITIAL_ORDER_HISTORY,
-  INITIAL_UNITS,
-  INITIAL_USAGE_LOGS,
   INITIAL_USER_ACCOUNTS,
-  INITIAL_VENDORS,
 } from './mockData';
 import {
   calculateItemMetrics,
@@ -93,7 +87,6 @@ export default function App() {
       if (saved) {
         const parsed: UserAccount[] = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // 고유 ID(acc.id) 기준으로 중복 레코드 정제 (나중에 수정된 레코드가 동일 ID의 구버전을 덮어씀)
           const byId = new Map<string, UserAccount>();
           parsed.forEach((acc, idx) => {
             const safeId = acc.id || `usr_${acc.username || idx}`;
@@ -140,12 +133,12 @@ export default function App() {
     return false;
   });
 
-  // Navigation tab (F5 새로고침 및 직접 URL 접속 시 ?tab= 파라미터/하위경로/localStorage에서 복원)
+  // Navigation tab
   const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
     resolveInitialActiveTab(currentUser, isWorkerMode)
   );
 
-  // Company Profile state (persisted in localStorage & Supabase DB without mock overwrite)
+  // Company Profile state
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_COMPANY_PROFILE);
@@ -159,18 +152,18 @@ export default function App() {
     return INITIAL_COMPANY_PROFILE;
   });
 
-  // Master Data State: Strictly load from localStorage / Supabase DB without overwriting cleared/modified fields with INITIAL_* mock data
+  // ----------------------------------------------------
+  // 실무 운영을 위한 목업 제거 (모두 빈 배열 []로 초기화)
+  // ----------------------------------------------------
   const [items, setItems] = useState<InventoryItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
       if (saved !== null) {
         const parsed: InventoryItem[] = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return []; // 👈 목업 대신 빈 배열로 시작
+    return [];
   });
 
   const [categories, setCategories] = useState<Category[]>(() => {
@@ -178,12 +171,10 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_CATEGORIES);
       if (saved !== null) {
         const parsed: Category[] = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return INITIAL_CATEGORIES;
+    return [];
   });
 
   const [vendors, setVendors] = useState<Vendor[]>(() => {
@@ -194,7 +185,7 @@ export default function App() {
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return INITIAL_VENDORS;
+    return [];
   });
 
   const [units, setUnits] = useState<Unit[]>(() => {
@@ -205,7 +196,7 @@ export default function App() {
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return INITIAL_UNITS;
+    return [];
   });
 
   const [memo, setMemo] = useState<string>(() => {
@@ -221,7 +212,7 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_LAST_AUDIT);
       if (saved) return saved;
     } catch {}
-    return '2026-11-07 14:00 (토) 주간실사';
+    return `${TODAY_STR} 실사 대기`;
   });
 
   const [orderHistory, setOrderHistory] = useState<OrderHistoryRecord[]>(() => {
@@ -232,7 +223,7 @@ export default function App() {
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return INITIAL_ORDER_HISTORY;
+    return [];
   });
 
   const [usageLogs, setUsageLogs] = useState<UsageLog[]>(() => {
@@ -243,7 +234,7 @@ export default function App() {
         if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return INITIAL_USAGE_LOGS;
+    return [];
   });
 
   const [memoLastSaved, setMemoLastSaved] = useState<string>('방금 전');
@@ -274,7 +265,6 @@ export default function App() {
     syncActiveTabToUrl(activeTab, false);
   }, [activeTab]);
 
-  // 브라우저 뒤로가기/앞으로가기(popstate) 및 URL 변경 감지하여 탭 복원
   useEffect(() => {
     const handlePopState = () => {
       const urlTab = extractTabFromLocation();
@@ -287,7 +277,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentUser, isWorkerMode]);
 
-  // 최초 로드 시 Supabase DB 연동 데이터 조회 및 동기화 (Mock 데이터로 원복되지 않도록 DB/localStorage 우선 적용)
+  // 최초 로드 시 Supabase DB 연동 데이터 조회 및 동기화
   useEffect(() => {
     if (!isDbConnected) return;
     let isCancelled = false;
@@ -307,19 +297,19 @@ export default function App() {
         }
 
         if (remoteAppState) {
-          if (Array.isArray(remoteAppState.items) && remoteAppState.items.length > 0) {
+          if (Array.isArray(remoteAppState.items)) {
             setItems(remoteAppState.items);
             localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(remoteAppState.items));
           }
-          if (Array.isArray(remoteAppState.categories) && remoteAppState.categories.length > 0) {
+          if (Array.isArray(remoteAppState.categories)) {
             setCategories(remoteAppState.categories);
             localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(remoteAppState.categories));
           }
-          if (Array.isArray(remoteAppState.vendors) && remoteAppState.vendors.length > 0) {
+          if (Array.isArray(remoteAppState.vendors)) {
             setVendors(remoteAppState.vendors);
             localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(remoteAppState.vendors));
           }
-          if (Array.isArray(remoteAppState.units) && remoteAppState.units.length > 0) {
+          if (Array.isArray(remoteAppState.units)) {
             setUnits(remoteAppState.units);
             localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(remoteAppState.units));
           }
@@ -462,17 +452,14 @@ export default function App() {
     });
   }, [items, categories, vendors]);
 
-  // 현장 사용자(LV.1) 또는 초기화된 계정이 초기 비밀번호('1234') 상태인 경우 로그인 직후 비밀번호 변경 강제
   const mustChangePassword = useMemo(() => {
     if (!currentUser) return false;
     const storedPw = userPasswords[currentUser.username];
     const isPassword1234 = !storedPw || storedPw === '1234';
     if (!isPassword1234) return false;
-    // 현장 사용자(LV.1)이거나 최고관리자에 의해 생성/초기화('1234')된 계정인 경우 강제
     return currentUser.level === 1 || storedPw === '1234';
   }, [currentUser, userPasswords]);
 
-  // Counts for header badges
   const orderNeededCount = calculatedItems.filter((i) => i.needsOrder).length;
   const awaitingArrivalCount = calculatedItems.filter(
     (i) => i.orderStatus === '발주완료(입고대기)'
@@ -486,7 +473,6 @@ export default function App() {
     }, 3500);
   };
 
-  // User Login, Logout & Password Change handlers (3-tier RBAC)
   const handleLogin = (user: UserAccount) => {
     setCurrentUser(user);
     try {
@@ -496,19 +482,16 @@ export default function App() {
     }
 
     if (user.level === 1) {
-      // LV.1 현장사용자: 현장 실사 & 입고 및 읽기전용 모니터링만 허용
       setIsWorkerMode(true);
       const nextTab = enforceTabRBAC(activeTab, user, true);
       setActiveTab(nextTab);
       syncActiveTabToUrl(nextTab, false);
     } else if (user.level === 2) {
-      // LV.2 사무실관리자: 기준정보 관리 및 계정 관리 탭 차단
       setIsWorkerMode(false);
       const nextTab = enforceTabRBAC(activeTab, user, false);
       setActiveTab(nextTab);
       syncActiveTabToUrl(nextTab, false);
     } else {
-      // LV.0 최고관리자: 전체 탭 허용 (현재 URL/저장된 하위 탭 유지)
       setIsWorkerMode(false);
       syncActiveTabToUrl(activeTab, false);
     }
@@ -561,7 +544,6 @@ export default function App() {
     showToast(`'${username}' 계정의 비밀번호가 사내 보안 정책에 따라 변경되었습니다.`);
   };
 
-  // LV.0 최고관리자 전용: 특정 사용자의 비밀번호를 다시 '1234'로 초기화
   const handleResetUserPassword = (username: string, displayName?: string) => {
     if ((currentUser?.level ?? 0) !== 0) {
       showToast('⚠️ 비밀번호 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
@@ -582,7 +564,6 @@ export default function App() {
     );
   };
 
-  // [계정 관리] 신규 계정 추가 핸들러 (초기 비밀번호 '1234' 자동 부여)
   const handleAddAccount = (newAccount: UserAccount) => {
     setUserAccounts((prev) => [...prev, newAccount].sort(compareUserAccountsByAffiliation));
     setUserPasswords((prev) => {
@@ -595,7 +576,6 @@ export default function App() {
       return updated;
     });
 
-    // Supabase DB 연동 시 Insert 수행
     void insertUserAccountToSupabase(newAccount);
 
     const displayName = newAccount.title
@@ -606,7 +586,6 @@ export default function App() {
     );
   };
 
-  // [계정 관리] 계정 정보 수정 핸들러 (고유 ID 기준 기존 레코드 정확히 Update, 절대 신규 추가하지 않음)
   const handleUpdateAccount = (updatedAccount: UserAccount, previousUsername?: string) => {
     const oldUsername = previousUsername || updatedAccount.username;
     const oldAcc = userAccounts.find(
@@ -619,13 +598,12 @@ export default function App() {
           return {
             ...acc,
             ...updatedAccount,
-            id: acc.id, // 고유 ID(PK) 절대 유지
+            id: acc.id,
           };
         }
         return acc;
       });
 
-      // 혹시 이전에 동일 id로 중복 생성된 레코드가 있다면 고유 id 기준으로 단일화 후 공장/라인순 정렬
       const deduped = new Map<string, UserAccount>();
       updatedList.forEach((acc) => {
         deduped.set(acc.id, acc);
@@ -649,10 +627,8 @@ export default function App() {
       });
     }
 
-    // Supabase DB 연동 시 고유 ID(updatedAccount.id) 기준으로 Update 쿼리 수행
     void updateUserAccountInSupabase(updatedAccount);
 
-    // 연동된 품목의 수령자 정보 자동 동기화
     const fullDisplayName = updatedAccount.title
       ? `${updatedAccount.name} ${updatedAccount.title}`
       : updatedAccount.name;
@@ -691,7 +667,6 @@ export default function App() {
     );
   };
 
-  // [계정 관리] 계정 활성/비활성 전환 핸들러
   const handleToggleAccountActive = (accountId: string) => {
     const target = userAccounts.find((a) => a.id === accountId);
     if (!target) return;
@@ -715,7 +690,6 @@ export default function App() {
     );
   };
 
-  // [계정 관리] 계정 삭제 핸들러 (고유 ID 기준 삭제 & 외래 키 참조/연관 품목 안전 처리)
   const handleDeleteAccount = async (accountId: string, options?: DeleteAccountOptions) => {
     const target = userAccounts.find((a) => a.id === accountId);
     if (!target) return;
@@ -726,7 +700,6 @@ export default function App() {
 
     const displayName = target.title ? `${target.name} ${target.title}` : target.name;
 
-    // 사용자가 '안전하게 비활성화로 전환'을 선택한 경우
     if (options?.mode === 'deactivate') {
       const deactivated: UserAccount = { ...target, isActive: false };
       setUserAccounts((prev) =>
@@ -739,10 +712,8 @@ export default function App() {
       return;
     }
 
-    // Supabase DB 연동 시 고유 ID(accountId)를 전달하여 Delete 실행 및 외래 키(FK) 에러 핸들링
     const dbDeleteResult = await deleteUserAccountFromSupabase(accountId);
     if (!dbDeleteResult.ok && dbDeleteResult.isForeignKeyError) {
-      // DB 외래 키 제약조건으로 삭제가 막힌 경우 안전하게 비활성화 상태로 자동 전환
       const deactivated: UserAccount = { ...target, isActive: false };
       setUserAccounts((prev) =>
         prev.map((acc) => (acc.id === accountId ? deactivated : acc))
@@ -754,7 +725,6 @@ export default function App() {
       return;
     }
 
-    // 품목 마스터에 연결된 수령자 참조(Foreign Key 성격) 자동 해제
     if (options?.unlinkItems !== false) {
       setItems((prev) =>
         prev.map((it) => {
@@ -774,10 +744,8 @@ export default function App() {
       );
     }
 
-    // 고유 ID(accountId) 기준으로 계정 목록에서 정확히 제거
     setUserAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
 
-    // 저장된 비밀번호 캐시 정리
     setUserPasswords((prev) => {
       if (!(target.username in prev)) return prev;
       const updated = { ...prev };
@@ -791,7 +759,6 @@ export default function App() {
     showToast(`🗑️ '${displayName} (${target.username})' 계정이 정상적으로 영구 삭제되었습니다.`);
   };
 
-  // [품목 마스터] 수령자(담당자) 드롭다운 즉시 연동 핸들러 (localStorage + Supabase DB 즉시 UPDATE)
   const handleAssignItemReceiver = (itemId: string, account: UserAccount | null) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
@@ -838,7 +805,6 @@ export default function App() {
     );
   };
 
-  // [품목 마스터] 품목/라인별 수령장소(하역위치) 개별 지정 및 기본값 복원 핸들러 (onBlur/버튼 클릭 시 즉시 DB UPDATE)
   const handleUpdateItemDeliveryLocation = (
     itemId: string,
     deliveryDetailLocation: string | undefined
@@ -874,7 +840,6 @@ export default function App() {
     }
   };
 
-  // [품목 마스터] 품목별 담당 '라인' 드롭다운 변경 핸들러 (셀 변경 시 localStorage + Supabase DB 즉시 UPDATE)
   const handleUpdateItemLine = (itemId: string, newLine: ProductionLine) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem || targetItem.line === newLine) return;
@@ -899,7 +864,6 @@ export default function App() {
     );
   };
 
-  // RBAC-guarded tab navigation
   const handleTabChangeWithRBAC = (nextTab: ActiveTab) => {
     const level = currentUser?.level ?? 0;
     const effectiveWorker = isWorkerMode || level === 1;
@@ -918,7 +882,6 @@ export default function App() {
     syncActiveTabToUrl(nextTab, true);
   };
 
-  // [기능 4] Toggle Worker Mode handler
   const handleToggleWorkerMode = () => {
     if (currentUser?.level === 1) {
       showToast('LV.1 현장사용자 계정은 기본 현장 전용 뷰로 고정되어 있습니다.');
@@ -927,7 +890,6 @@ export default function App() {
     setIsWorkerMode((prev) => {
       const next = !prev;
       if (next) {
-        // When entering Worker View, switch to field-audit if currently on an office-only tab
         if (activeTab !== 'field-audit' && activeTab !== 'dashboard') {
           setActiveTab('field-audit');
         }
@@ -941,7 +903,6 @@ export default function App() {
     });
   };
 
-  // Handlers for Stock & Usage
   const handleUpdateStock = (itemId: string, newPackStock: number) => {
     const now = new Date();
     const timeStr = `${TODAY_STR} ${String(now.getHours()).padStart(2, '0')}:${String(
@@ -1030,7 +991,6 @@ export default function App() {
     showToast(`발주 진행상태가 '${newStatus}' 상태로 변경되었습니다.`);
   };
 
-  // Field stock batch commit handler (Draft & Commit mechanism)
   const handleBatchCommitStock = (changes: Record<string, number>) => {
     const changeCount = Object.keys(changes).length;
     if (changeCount === 0) return;
@@ -1102,7 +1062,6 @@ export default function App() {
     );
   };
 
-  // [기능 1] Confirm weekly audit without stock quantity change (for delayed items whose physical stock matches current book stock)
   const handleConfirmAuditWithoutChange = (itemIds: string[]) => {
     if (itemIds.length === 0) return;
     const now = new Date();
@@ -1139,7 +1098,6 @@ export default function App() {
     );
   };
 
-  // [기능 2] Calibration: Update item master dailyUsage from stats (single & batch)
   const handleApplyActualDailyUsage = (itemId: string, actualDailyUsage: number) => {
     setItems((prev) =>
       prev.map((it) => (it.id === itemId ? { ...it, dailyUsage: actualDailyUsage } : it))
@@ -1161,7 +1119,6 @@ export default function App() {
     );
   };
 
-  // Field receiving handler: Sets final stock = (remainingStockBeforeArrival) + (actualIncomingQty), resets status
   const handleReceiveStock = (
     itemId: string,
     remainingStockBeforeArrival?: number,
@@ -1221,7 +1178,6 @@ export default function App() {
       })
     );
 
-    // Sync orderHistory status to '입고완료' (or create a completed receipt record so monthly inbound stats stay accurate)
     setOrderHistory((prev) => {
       const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
       if (idx !== -1) {
@@ -1267,7 +1223,6 @@ export default function App() {
     );
   };
 
-  // Office order placement handler
   const handleConfirmOrder = (
     itemIds: string[],
     orderDate: string,
@@ -1291,7 +1246,6 @@ export default function App() {
       })
     );
 
-    // Create & append records to orderHistory
     const newRecords: OrderHistoryRecord[] = [];
     items.forEach((it) => {
       if (itemIds.includes(it.id)) {
@@ -1335,7 +1289,6 @@ export default function App() {
     );
   };
 
-  // Update awaiting order (orderDate, expectedArrivalDate, orderedPackQty)
   const handleUpdateOrder = (
     itemId: string,
     orderDate: string,
@@ -1360,7 +1313,6 @@ export default function App() {
       })
     );
 
-    // Sync orderHistory awaiting record
     setOrderHistory((prev) => {
       const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
       if (idx !== -1) {
@@ -1385,7 +1337,6 @@ export default function App() {
     showToast(`[${targetItem.itemName}] 발주 정보(일정 및 수량)가 성공적으로 변경되었습니다.`);
   };
 
-  // Cancel awaiting order (reverts to '발주대기' and marks history as '발주취소')
   const handleCancelOrder = (itemId: string) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
@@ -1405,7 +1356,6 @@ export default function App() {
       })
     );
 
-    // Sync orderHistory status to '발주취소'
     setOrderHistory((prev) => {
       const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
       if (idx !== -1) {
@@ -1426,7 +1376,6 @@ export default function App() {
     showToast(`[${targetItem.itemName}] 발주가 취소되었으며, 발주대기 상태로 복구되었습니다.`);
   };
 
-  // Update order history record
   const handleUpdateOrderHistoryRecord = (updatedRecord: OrderHistoryRecord) => {
     setOrderHistory((prev) =>
       prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r))
@@ -1434,13 +1383,11 @@ export default function App() {
     showToast('발주 이력 상세 정보가 수정되었습니다.');
   };
 
-  // Delete order history record
   const handleDeleteOrderHistoryRecord = (recordId: string) => {
     setOrderHistory((prev) => prev.filter((r) => r.id !== recordId));
     showToast('발주 이력 레코드가 삭제되었습니다.');
   };
 
-  // Open PO modal from dashboard or order sheet
   const handleOpenPOMetaModal = (
     vendor: Vendor,
     orderItems: CalculatedItem[],
@@ -1473,9 +1420,7 @@ export default function App() {
     handleOpenPOMetaModal(v, targetItems, TODAY_STR, expectedArrivalDate);
   };
 
-  // Add / Edit / Delete items
   const handleOpenEditItem = (targetItem: InventoryItem) => {
-    // 1. 고유 item.id 기반 정확한 원본 객체 찾기
     const original = items.find((i) => i.id === targetItem.id) || targetItem;
     setEditingItem(original);
     setIsNewItemModalOpen(true);
@@ -1510,7 +1455,6 @@ export default function App() {
     showToast(`🗑️ '${it.itemName} (${it.spec})' 품목이 DB에서 삭제되었습니다.`);
   };
 
-  // Master Data handlers
   const handleUpdateCompanyProfile = (profile: CompanyProfile) => {
     setCompanyProfile(profile);
     try {
@@ -1616,7 +1560,6 @@ export default function App() {
     showToast('🗑️ 단위가 삭제되었습니다.');
   };
 
-  // [변경사항 저장] 기준정보 및 계정 데이터 일괄 DB(Supabase + localStorage) 강제 동기화 핸들러
   const handleManualSaveMasterChanges = async (label = '기준정보 및 품목 마스터') => {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
@@ -1646,15 +1589,14 @@ export default function App() {
     }
   };
 
-  // Reset to seed data
   const handleResetAllData = () => {
-    setItems(INITIAL_INVENTORY_ITEMS);
-    setCategories(INITIAL_CATEGORIES);
-    setVendors(INITIAL_VENDORS);
-    setUnits(INITIAL_UNITS);
+    setItems([]);
+    setCategories([]);
+    setVendors([]);
+    setUnits([]);
     setMemo(INITIAL_MEMO);
-    setOrderHistory(INITIAL_ORDER_HISTORY);
-    setUsageLogs(INITIAL_USAGE_LOGS);
+    setOrderHistory([]);
+    setUsageLogs([]);
     setCompanyProfile(INITIAL_COMPANY_PROFILE);
     setUserAccounts(INITIAL_USER_ACCOUNTS);
     localStorage.removeItem(STORAGE_KEY_ITEMS);
@@ -1666,7 +1608,7 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY_USAGE_LOGS);
     localStorage.removeItem(STORAGE_KEY_COMPANY_PROFILE);
     localStorage.removeItem(STORAGE_KEY_USER_ACCOUNTS);
-    showToast('초기 시드 데이터로 전체 초기화가 완료되었습니다.');
+    showToast('초기화가 완료되었습니다. (모든 데이터가 비워졌습니다)');
   };
 
   const isEffectiveWorkerMode = isWorkerMode || currentUser?.level === 1;
@@ -1675,7 +1617,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-      {/* Global Header */}
       <Header
         activeTab={activeTab}
         onTabChange={handleTabChangeWithRBAC}
@@ -1695,7 +1636,6 @@ export default function App() {
         isDbConnected={isDbConnected}
       />
 
-      {/* Global Notification Toast */}
       {globalToast && (
         <div className="fixed top-24 sm:top-20 right-3 sm:right-6 left-3 sm:left-auto max-w-md z-50 bg-slate-900 text-white px-4 sm:px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 sm:gap-3 border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-200">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -1703,7 +1643,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
       <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 sm:px-4 py-3 sm:py-4">
         {activeTab === 'dashboard' && (
           <DashboardTab
@@ -1820,7 +1759,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Modals */}
       <NewItemModal
         isOpen={isNewItemModalOpen}
         onClose={() => {
@@ -1852,7 +1790,7 @@ export default function App() {
               it.orderedPackQty || it.recommendedPackOrderQty;
           });
           handleConfirmOrder(
-            poModalData.items.map((i) => i.id),
+            poModaldata.items.map((i) => i.id),
             poModalData.orderDate,
             poModalData.expectedArrivalDate,
             quantities
@@ -1869,7 +1807,6 @@ export default function App() {
         onCancelOrder={handleCancelOrder}
       />
 
-      {/* Login & Password Change Modals */}
       <LoginModal
         isOpen={!currentUser}
         onLogin={handleLogin}
