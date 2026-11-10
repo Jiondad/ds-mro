@@ -75,7 +75,9 @@ export interface InventoryItem {
   expectedArrivalDate: string | null; // 입고예정일 YYYY-MM-DD
   orderedPackQty: number | null; // 실제 발주한 포장단위 수량
   lastOrderDate: string | null; // 최근 발주일 이력 YYYY-MM-DD
-  lastAuditDate?: string | null; // 마지막 실사확정 일시 (예: 2026-11-07 14:30)
+  lastAuditDate?: string | null; // 마지막 실사확정 일시 (예: 2026-11-07 14:30 실사확정)
+  lastAuditedBy?: string | null; // 마지막 실사/입고 처리자명 (예: 박현장 반장)
+  lastAuditUpdatedAt?: number | null; // 마지막 실사 갱신 타임스탬프(ms, 최신순 정렬용)
   purpose: string; // 용도 (예: 생산설비 세척, 내수제품포장, 목재파렛트 제조 등)
   triggerPackQty?: number | null; // 품목 개별 발주 기준 포장수량 (미지정 시 카테고리 기본값 사용)
   fixedOrderPackQty?: number | null; // 품목 개별 1회 고정 발주 포장수량 (미지정 시 카테고리 기본값 사용)

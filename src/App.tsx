@@ -847,6 +847,12 @@ export default function App() {
       now.getMinutes()
     ).padStart(2, '0')}`;
     const auditLabel = `${timeStr} 실사확정`;
+    const auditorName = currentUser
+      ? currentUser.title
+        ? `${currentUser.name} ${currentUser.title}`
+        : currentUser.name
+      : undefined;
+    const nowMs = Date.now();
     setLastAuditTimestamp(auditLabel);
 
     setItems((prev) =>
@@ -856,6 +862,8 @@ export default function App() {
             ...item,
             currentPackStock: newPackStock,
             lastAuditDate: auditLabel,
+            lastAuditedBy: auditorName || item.receiverName || '현장담당',
+            lastAuditUpdatedAt: nowMs,
           };
         }
         return item;
@@ -931,6 +939,12 @@ export default function App() {
       now.getMinutes()
     ).padStart(2, '0')}`;
     const auditLabel = `${timeStr} 실사확정`;
+    const auditorName = currentUser
+      ? currentUser.title
+        ? `${currentUser.name} ${currentUser.title}`
+        : currentUser.name
+      : undefined;
+    const baseMs = Date.now();
     setLastAuditTimestamp(auditLabel);
 
     const newLogs: UsageLog[] = [];
@@ -965,13 +979,17 @@ export default function App() {
       setUsageLogs((prev) => [...newLogs, ...prev]);
     }
 
+    let offset = 0;
     setItems((prev) =>
       prev.map((item) => {
         if (changes[item.id] !== undefined) {
+          offset += 1;
           return {
             ...item,
             currentPackStock: changes[item.id],
             lastAuditDate: auditLabel,
+            lastAuditedBy: auditorName || item.receiverName || '현장담당',
+            lastAuditUpdatedAt: baseMs + offset,
           };
         }
         return item;
@@ -991,10 +1009,28 @@ export default function App() {
       now.getMinutes()
     ).padStart(2, '0')}`;
     const auditLabel = `${timeStr} 실사확정`;
+    const auditorName = currentUser
+      ? currentUser.title
+        ? `${currentUser.name} ${currentUser.title}`
+        : currentUser.name
+      : undefined;
+    const baseMs = Date.now();
     setLastAuditTimestamp(auditLabel);
 
+    let offset = 0;
     setItems((prev) =>
-      prev.map((it) => (itemIds.includes(it.id) ? { ...it, lastAuditDate: auditLabel } : it))
+      prev.map((it) => {
+        if (itemIds.includes(it.id)) {
+          offset += 1;
+          return {
+            ...it,
+            lastAuditDate: auditLabel,
+            lastAuditedBy: auditorName || it.receiverName || '현장담당',
+            lastAuditUpdatedAt: baseMs + offset,
+          };
+        }
+        return it;
+      })
     );
 
     showToast(
@@ -1056,6 +1092,12 @@ export default function App() {
       now.getMinutes()
     ).padStart(2, '0')}`;
     const receiveAuditLabel = `${timeStr} 입고확정`;
+    const auditorName = currentUser
+      ? currentUser.title
+        ? `${currentUser.name} ${currentUser.title}`
+        : currentUser.name
+      : undefined;
+    const nowMs = Date.now();
     setLastAuditTimestamp(receiveAuditLabel);
 
     setItems((prev) =>
@@ -1067,6 +1109,8 @@ export default function App() {
             orderStatus: '발주대기',
             lastOrderDate: it.orderDate || TODAY_STR,
             lastAuditDate: receiveAuditLabel,
+            lastAuditedBy: auditorName || it.receiverName || '현장담당',
+            lastAuditUpdatedAt: nowMs,
             orderDate: null,
             expectedArrivalDate: null,
             orderedPackQty: null,
