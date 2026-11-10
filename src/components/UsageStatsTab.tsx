@@ -15,6 +15,7 @@ import {
   isAsanLine,
   matchLineFilter,
 } from '../utils/calculations';
+import { useUrlPersistedState } from '../utils/urlState';
 import {
   BarChart3,
   TrendingUp,
@@ -45,6 +46,7 @@ interface UsageStatsTabProps {
 }
 
 type PeriodType = 'current' | '3months' | '6months' | 'annual';
+const VALID_STATS_PERIODS: readonly PeriodType[] = ['current', '3months', '6months', 'annual'] as const;
 
 export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
   items,
@@ -56,12 +58,33 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
   onBatchApplyActualDailyUsage,
   onShowToast,
 }) => {
-  // Filter States
-  const [period, setPeriod] = useState<PeriodType>('3months');
-  const [selectedLine, setSelectedLine] = useState<string>('전체');
-  const [selectedCategory, setSelectedCategory] = useState<string>('전체');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showOnlyDeviationWarning, setShowOnlyDeviationWarning] = useState<boolean>(false);
+  // Filter States (persisted across F5 refresh & URL query params)
+  const [period, setPeriod] = useUrlPersistedState<PeriodType>(
+    'statsPeriod',
+    'ds_mro_stats_period',
+    '3months',
+    VALID_STATS_PERIODS
+  );
+  const [selectedLine, setSelectedLine] = useUrlPersistedState<string>(
+    'statsLine',
+    'ds_mro_stats_line',
+    '전체'
+  );
+  const [selectedCategory, setSelectedCategory] = useUrlPersistedState<string>(
+    'statsCat',
+    'ds_mro_stats_cat',
+    '전체'
+  );
+  const [searchQuery, setSearchQuery] = useUrlPersistedState<string>(
+    'statsQ',
+    'ds_mro_stats_q',
+    ''
+  );
+  const [showOnlyDeviationWarning, setShowOnlyDeviationWarning] = useUrlPersistedState<boolean>(
+    'statsDev',
+    'ds_mro_stats_dev',
+    false
+  );
 
   // Period Config: months included & estimated elapsed days
   const periodInfo = useMemo(() => {

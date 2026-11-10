@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>대성스틸 소모품 재고 실사 & 자동 발주 시스템</title>
+    <script type="text/javascript">
+      // GitHub Pages 및 정적 호스팅 환경에서 하위 경로 새로고침(F5) 또는 직접 URL 진입 시
+      // 현재 경로·쿼리 파라미터·해시를 보존하여 루트 index.html로 안전하게 전달합니다.
+      (function () {
+        var l = window.location;
+        try {
+          sessionStorage.setItem(
+            '__ds_mro_spa_redirect__',
+            JSON.stringify({
+              pathname: l.pathname,
+              search: l.search,
+              hash: l.hash,
+              timestamp: Date.now(),
+            })
+          );
+        } catch (e) {}
+
+        // '/ds-mro/' 베이스 경로 여부 자동 감지
+        var isDsMroBase = l.pathname === '/ds-mro' || l.pathname.indexOf('/ds-mro/') === 0;
+        var basePath = isDsMroBase ? '/ds-mro/' : '/';
+        var targetUrl = l.protocol + '//' + l.host + basePath + l.search + l.hash;
+        l.replace(targetUrl);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

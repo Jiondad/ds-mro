@@ -23,20 +23,31 @@ import {
   INITIAL_VENDORS,
 } from './mockData';
 import { calculateItemMetrics, TODAY_STR } from './utils/calculations';
+import {
+  resolveInitialActiveTab,
+  syncActiveTabToUrl,
+  extractTabFromLocation,
+  enforceTabRBAC,
+} from './utils/urlState';
 import { Header } from './components/Header';
 import { DashboardTab } from './components/DashboardTab';
 import { FieldAuditTab } from './components/FieldAuditTab';
 import { OrderManagementTab } from './components/OrderManagementTab';
 import { MasterDataTab } from './components/MasterDataTab';
 import { UsageStatsTab } from './components/UsageStatsTab';
-import { AccountManagementTab } from './components/AccountManagementTab';
+import { AccountManagementTab, DeleteAccountOptions } from './components/AccountManagementTab';
 import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { NewItemModal } from './components/NewItemModal';
 import { EditOrderModal } from './components/EditOrderModal';
 import { LoginModal } from './components/LoginModal';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { DbConfigModal } from './components/DbConfigModal';
-import { getSavedSupabaseConfig } from './lib/supabase';
+import {
+  getSavedSupabaseConfig,
+  insertUserAccountToSupabase,
+  updateUserAccountInSupabase,
+  deleteUserAccountFromSupabase,
+} from './lib/supabase';
 import { CheckCircle2 } from 'lucide-react';
 
 const STORAGE_KEY_ITEMS = 'daeseong_steel_inventory_v1';
@@ -63,23 +74,27 @@ export default function App() {
     return null;
   });
 
-  // [계정 관리] 등록 사용자 계정 목록 상태
+  // [계정 관리] 등록 사용자 계정 목록 상태 (고유 ID 기준 관리 및 중복 ID 자동 정제)
   const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USER_ACCOUNTS);
       if (saved) {
         const parsed: UserAccount[] = JSON.parse(saved);
-        const byUsername = new Map<string, UserAccount>();
-        INITIAL_USER_ACCOUNTS.forEach((seed) => byUsername.set(seed.username, seed));
-        parsed.forEach((acc) => {
-          const seedMatch = byUsername.get(acc.username);
-          byUsername.set(acc.username, {
-            ...seedMatch,
-            ...acc,
-            isActive: acc.isActive !== false,
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // 고유 ID(acc.id) 기준으로 중복 레코드 정제 (나중에 수정된 레코드가 동일 ID의 구버전을 덮어씀)
+          const byId = new Map<string, UserAccount>();
+          parsed.forEach((acc, idx) => {
+            const safeId = acc.id || `usr_${acc.username || idx}`;
+            const prev = byId.get(safeId);
+            byId.set(safeId, {
+              ...prev,
+              ...acc,
+              id: safeId,
+              isActive: acc.isActive !== false,
+            });
           });
-        });
-        return Array.from(byUsername.values());
+          return Array.from(byId.values());
+        }
       }
     } catch {}
     return INITIAL_USER_ACCOUNTS;
@@ -99,18 +114,6 @@ export default function App() {
     return Boolean(cfg.url && cfg.anonKey);
   });
 
-  // Navigation tab
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_CURRENT_USER);
-      if (saved) {
-        const parsed: UserAccount = JSON.parse(saved);
-        if (parsed.level === 1) return 'field-audit';
-      }
-    } catch {}
-    return 'dashboard';
-  });
-
   // [기능 4] 현장 작업자용 간소화 모드(Worker View) 상태
   const [isWorkerMode, setIsWorkerMode] = useState<boolean>(() => {
     try {
@@ -124,6 +127,11 @@ export default function App() {
     } catch {}
     return false;
   });
+
+  // Navigation tab (F5 새로고침 및 직접 URL 접속 시 ?tab= 파라미터/하위경로/localStorage에서 복원)
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    resolveInitialActiveTab(currentUser, isWorkerMode)
+  );
 
   // Company Profile state (includes monthlyBudget for [기능 3])
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
@@ -262,7 +270,24 @@ export default function App() {
     isAlreadyOrdered: false,
   });
 
-  // Persist to LocalStorage
+  // Persist to LocalStorage & URL Search Params
+  useEffect(() => {
+    syncActiveTabToUrl(activeTab, false);
+  }, [activeTab]);
+
+  // 브라우저 뒤로가기/앞으로가기(popstate) 및 URL 변경 감지하여 탭 복원
+  useEffect(() => {
+    const handlePopState = () => {
+      const urlTab = extractTabFromLocation();
+      if (urlTab) {
+        const allowed = enforceTabRBAC(urlTab, currentUser, isWorkerMode);
+        setActiveTab(allowed);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentUser, isWorkerMode]);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_USER_ACCOUNTS, JSON.stringify(userAccounts));
@@ -401,16 +426,19 @@ export default function App() {
     if (user.level === 1) {
       // LV.1 현장사용자: 현장 실사 & 입고 및 읽기전용 모니터링만 허용
       setIsWorkerMode(true);
-      setActiveTab('field-audit');
+      const nextTab = enforceTabRBAC(activeTab, user, true);
+      setActiveTab(nextTab);
+      syncActiveTabToUrl(nextTab, false);
     } else if (user.level === 2) {
       // LV.2 사무실관리자: 기준정보 관리 및 계정 관리 탭 차단
       setIsWorkerMode(false);
-      if (activeTab === 'master-data' || activeTab === 'account-management') {
-        setActiveTab('dashboard');
-      }
+      const nextTab = enforceTabRBAC(activeTab, user, false);
+      setActiveTab(nextTab);
+      syncActiveTabToUrl(nextTab, false);
     } else {
-      // LV.0 최고관리자: 전체 탭 허용
+      // LV.0 최고관리자: 전체 탭 허용 (현재 URL/저장된 하위 탭 유지)
       setIsWorkerMode(false);
+      syncActiveTabToUrl(activeTab, false);
     }
 
     const storedPw = userPasswords[user.username];
@@ -494,6 +522,10 @@ export default function App() {
       }
       return updated;
     });
+
+    // Supabase DB 연동 시 Insert 수행
+    void insertUserAccountToSupabase(newAccount);
+
     const displayName = newAccount.title
       ? `${newAccount.name} ${newAccount.title}`
       : newAccount.name;
@@ -502,14 +534,32 @@ export default function App() {
     );
   };
 
-  // [계정 관리] 계정 정보 수정 핸들러 (연동된 품목 마스터 수령자 정보도 자동 동기화)
+  // [계정 관리] 계정 정보 수정 핸들러 (고유 ID 기준 기존 레코드 정확히 Update, 절대 신규 추가하지 않음)
   const handleUpdateAccount = (updatedAccount: UserAccount, previousUsername?: string) => {
     const oldUsername = previousUsername || updatedAccount.username;
-    const oldAcc = userAccounts.find((a) => a.id === updatedAccount.id);
-
-    setUserAccounts((prev) =>
-      prev.map((acc) => (acc.id === updatedAccount.id ? updatedAccount : acc))
+    const oldAcc = userAccounts.find(
+      (a) => a.id === updatedAccount.id || (previousUsername && a.username === previousUsername)
     );
+
+    setUserAccounts((prev) => {
+      const updatedList = prev.map((acc) => {
+        if (acc.id === updatedAccount.id) {
+          return {
+            ...acc,
+            ...updatedAccount,
+            id: acc.id, // 고유 ID(PK) 절대 유지
+          };
+        }
+        return acc;
+      });
+
+      // 혹시 이전에 동일 id로 중복 생성된 레코드가 있다면 고유 id 기준으로 단일화
+      const deduped = new Map<string, UserAccount>();
+      updatedList.forEach((acc) => {
+        deduped.set(acc.id, acc);
+      });
+      return Array.from(deduped.values());
+    });
 
     if (previousUsername && previousUsername !== updatedAccount.username) {
       setUserPasswords((prev) => {
@@ -526,6 +576,9 @@ export default function App() {
         return updated;
       });
     }
+
+    // Supabase DB 연동 시 고유 ID(updatedAccount.id) 기준으로 Update 쿼리 수행
+    void updateUserAccountInSupabase(updatedAccount);
 
     // 연동된 품목의 수령자 정보 자동 동기화
     const fullDisplayName = updatedAccount.title
@@ -561,7 +614,9 @@ export default function App() {
       } catch {}
     }
 
-    showToast(`'${fullDisplayName} (${updatedAccount.username})' 계정 정보가 수정되었습니다.`);
+    showToast(
+      `✅ '${fullDisplayName} (${updatedAccount.username})' 계정 정보가 고유 ID(${updatedAccount.id}) 기준으로 업데이트되었습니다.`
+    );
   };
 
   // [계정 관리] 계정 활성/비활성 전환 핸들러
@@ -573,9 +628,13 @@ export default function App() {
       return;
     }
     const nextActive = target.isActive === false;
+    const updatedTarget: UserAccount = { ...target, isActive: nextActive };
+
     setUserAccounts((prev) =>
-      prev.map((acc) => (acc.id === accountId ? { ...acc, isActive: nextActive } : acc))
+      prev.map((acc) => (acc.id === accountId ? updatedTarget : acc))
     );
+    void updateUserAccountInSupabase(updatedTarget);
+
     const displayName = target.title ? `${target.name} ${target.title}` : target.name;
     showToast(
       nextActive
@@ -584,23 +643,80 @@ export default function App() {
     );
   };
 
-  // [계정 관리] 계정 삭제 핸들러
-  const handleDeleteAccount = (accountId: string) => {
+  // [계정 관리] 계정 삭제 핸들러 (고유 ID 기준 삭제 & 외래 키 참조/연관 품목 안전 처리)
+  const handleDeleteAccount = async (accountId: string, options?: DeleteAccountOptions) => {
     const target = userAccounts.find((a) => a.id === accountId);
     if (!target) return;
     if (target.username === 'admin') {
       showToast('⚠️ 시스템 기본 최고관리자(admin) 계정은 삭제할 수 없습니다.');
       return;
     }
+
     const displayName = target.title ? `${target.name} ${target.title}` : target.name;
-    if (
-      confirm(
-        `'${displayName} (${target.username})' 계정을 삭제하시겠습니까?\n삭제 시 해당 아이디로 시스템 로그인이 불가합니다.`
-      )
-    ) {
-      setUserAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
-      showToast(`'${displayName} (${target.username})' 계정이 삭제되었습니다.`);
+
+    // 사용자가 '안전하게 비활성화로 전환'을 선택한 경우
+    if (options?.mode === 'deactivate') {
+      const deactivated: UserAccount = { ...target, isActive: false };
+      setUserAccounts((prev) =>
+        prev.map((acc) => (acc.id === accountId ? deactivated : acc))
+      );
+      await updateUserAccountInSupabase(deactivated);
+      showToast(
+        `⛔ '${displayName} (${target.username})' 계정이 연결된 품목 이력 보존을 위해 [비활성] 상태로 전환되었습니다.`
+      );
+      return;
     }
+
+    // Supabase DB 연동 시 고유 ID(accountId)를 전달하여 Delete 실행 및 외래 키(FK) 에러 핸들링
+    const dbDeleteResult = await deleteUserAccountFromSupabase(accountId);
+    if (!dbDeleteResult.ok && dbDeleteResult.isForeignKeyError) {
+      // DB 외래 키 제약조건으로 삭제가 막힌 경우 안전하게 비활성화 상태로 자동 전환
+      const deactivated: UserAccount = { ...target, isActive: false };
+      setUserAccounts((prev) =>
+        prev.map((acc) => (acc.id === accountId ? deactivated : acc))
+      );
+      await updateUserAccountInSupabase(deactivated);
+      showToast(
+        `⚠️ '${displayName}' 계정이 DB 외래 키(품목/발주 이력)와 연결되어 있어 안전하게 [비활성] 상태로 전환되었습니다.`
+      );
+      return;
+    }
+
+    // 품목 마스터에 연결된 수령자 참조(Foreign Key 성격) 자동 해제
+    if (options?.unlinkItems !== false) {
+      setItems((prev) =>
+        prev.map((it) => {
+          const isLinkedById = it.receiverLoginId && it.receiverLoginId.trim() === target.username;
+          const isLinkedByName =
+            !it.receiverLoginId && it.receiverName && it.receiverName.trim() === target.name.trim();
+          if (isLinkedById || isLinkedByName) {
+            return {
+              ...it,
+              receiverLoginId: undefined,
+              receiverName: undefined,
+              receiverPhone: undefined,
+            };
+          }
+          return it;
+        })
+      );
+    }
+
+    // 고유 ID(accountId) 기준으로 계정 목록에서 정확히 제거
+    setUserAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
+
+    // 저장된 비밀번호 캐시 정리
+    setUserPasswords((prev) => {
+      if (!(target.username in prev)) return prev;
+      const updated = { ...prev };
+      delete updated[target.username];
+      try {
+        localStorage.setItem(STORAGE_KEY_USER_PASSWORDS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    showToast(`🗑️ '${displayName} (${target.username})' 계정이 정상적으로 영구 삭제되었습니다.`);
   };
 
   // [품목 마스터] 수령자(담당자) 드롭다운 즉시 연동 핸들러
@@ -659,6 +775,7 @@ export default function App() {
     }
 
     setActiveTab(nextTab);
+    syncActiveTabToUrl(nextTab, true);
   };
 
   // [기능 4] Toggle Worker Mode handler
@@ -1168,10 +1285,8 @@ export default function App() {
   const handleDeleteItem = (itemId: string) => {
     const it = items.find((i) => i.id === itemId);
     if (!it) return;
-    if (confirm(`'${it.itemName} (${it.spec})' 품목을 삭제하시겠습니까?`)) {
-      setItems((prev) => prev.filter((i) => i.id !== itemId));
-      showToast(`품목이 삭제되었습니다.`);
-    }
+    setItems((prev) => prev.filter((i) => i.id !== itemId));
+    showToast(`'${it.itemName} (${it.spec})' 품목이 삭제되었습니다.`);
   };
 
   // Master Data handlers
@@ -1376,6 +1491,7 @@ export default function App() {
             accounts={userAccounts}
             items={calculatedItems}
             userPasswords={userPasswords}
+            currentUser={currentUser}
             onAddAccount={handleAddAccount}
             onUpdateAccount={handleUpdateAccount}
             onDeleteAccount={handleDeleteAccount}

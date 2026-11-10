@@ -8,6 +8,7 @@ import {
   isAsanLine,
   matchLineFilter,
 } from '../utils/calculations';
+import { useUrlPersistedState } from '../utils/urlState';
 import {
   ClipboardCheck,
   Truck,
@@ -47,23 +48,51 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   onConfirmAuditWithoutChange,
 }) => {
   // Line & Factory filter ('전체', '포승공장', 'SL1', 'SL2', '공용', '아산공장')
-  const [selectedLine, setSelectedLine] = useState<string>('전체');
+  const [selectedLine, setSelectedLine] = useUrlPersistedState<string>(
+    'auditLine',
+    'ds_mro_audit_line',
+    '전체'
+  );
 
   // Category filter
-  const [selectedCategory, setSelectedCategory] = useState<string>('전체');
+  const [selectedCategory, setSelectedCategory] = useUrlPersistedState<string>(
+    'auditCat',
+    'ds_mro_audit_cat',
+    '전체'
+  );
 
   // Filter toggle: only items awaiting delivery
-  const [filterOnlyAwaiting, setFilterOnlyAwaiting] = useState<boolean>(false);
+  const [filterOnlyAwaiting, setFilterOnlyAwaiting] = useUrlPersistedState<boolean>(
+    'auditAwait',
+    'ds_mro_audit_await',
+    false
+  );
 
   // Filter toggle: only items with delayed or missing weekly audit
-  const [filterOnlyAuditDelayed, setFilterOnlyAuditDelayed] = useState<boolean>(false);
+  const [filterOnlyAuditDelayed, setFilterOnlyAuditDelayed] = useUrlPersistedState<boolean>(
+    'auditDelay',
+    'ds_mro_audit_delay',
+    false
+  );
 
   // Search query
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useUrlPersistedState<string>(
+    'auditQ',
+    'ds_mro_audit_q',
+    ''
+  );
 
   // Sorting state: default is fixed '라인 > 카테고리 > 품목명' (절대 실사 입력 중 행 점프 없음)
-  const [sortField, setSortField] = useState<'default' | 'remainingDays' | 'itemName'>('default');
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
+  const [sortField, setSortField] = useUrlPersistedState<'default' | 'remainingDays' | 'itemName'>(
+    'auditSort',
+    'ds_mro_audit_sort',
+    'default'
+  );
+  const [sortAsc, setSortAsc] = useUrlPersistedState<boolean>(
+    'auditAsc',
+    'ds_mro_audit_asc',
+    true
+  );
 
   // Local draft state for stock inputs: Record<itemId, draftStock>
   const [draftStocks, setDraftStocks] = useState<Record<string, number>>({});

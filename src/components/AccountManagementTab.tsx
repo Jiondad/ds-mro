@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { CalculatedItem, UserAccount, UserLevel } from '../types';
 import { TODAY_STR } from '../utils/calculations';
+import { useUrlPersistedState } from '../utils/urlState';
 import {
   Users,
   UserPlus,
@@ -16,7 +17,13 @@ import {
   Briefcase,
   Package,
   X,
+  AlertTriangle,
 } from 'lucide-react';
+
+export interface DeleteAccountOptions {
+  mode?: 'delete' | 'deactivate';
+  unlinkItems?: boolean;
+}
 
 interface AccountManagementTabProps {
   accounts: UserAccount[];
@@ -25,7 +32,7 @@ interface AccountManagementTabProps {
   currentUser?: UserAccount | null;
   onAddAccount: (newAccount: UserAccount) => void;
   onUpdateAccount: (updatedAccount: UserAccount, previousUsername?: string) => void;
-  onDeleteAccount: (accountId: string) => void;
+  onDeleteAccount: (accountId: string, options?: DeleteAccountOptions) => void;
   onToggleAccountActive: (accountId: string) => void;
   onResetUserPassword: (username: string, displayName?: string) => void;
 }
@@ -58,15 +65,33 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
   const [level, setLevel] = useState<UserLevel>(1);
   const [formError, setFormError] = useState<string>('');
 
-  // Search & Filter States
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [affiliationFilter, setAffiliationFilter] = useState<string>('전체');
-  const [roleFilter, setRoleFilter] = useState<string>('전체');
+  // Search & Filter States (persisted across F5 refresh & URL query params)
+  const [searchQuery, setSearchQuery] = useUrlPersistedState<string>(
+    'accQ',
+    'ds_mro_acc_q',
+    ''
+  );
+  const [affiliationFilter, setAffiliationFilter] = useUrlPersistedState<string>(
+    'accAff',
+    'ds_mro_acc_aff',
+    '전체'
+  );
+  const [roleFilter, setRoleFilter] = useUrlPersistedState<string>(
+    'accRole',
+    'ds_mro_acc_role',
+    '전체'
+  );
 
-  // Edit Modal State
+  // Edit Modal State (strictly keyed by editingAccount.id)
   const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
   const [editOriginalUsername, setEditOriginalUsername] = useState<string>('');
   const [editError, setEditError] = useState<string>('');
+
+  // Delete Confirmation Modal State (replaces blocked window.confirm)
+  const [deletingAccount, setDeletingAccount] = useState<UserAccount | null>(null);
+
+  // Password Reset Confirmation Modal State (replaces blocked window.confirm)
+  const [resettingAccount, setResettingAccount] = useState<UserAccount | null>(null);
 
   // Compute assigned item counts per account (matched by receiverLoginId or receiverName)
   const itemCountByAccount = useMemo(() => {
@@ -191,7 +216,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
       level === 0 ? 'LV.0 최고관리자' : level === 2 ? 'LV.2 사무실관리자' : 'LV.1 현장사용자';
 
     const newAcc: UserAccount = {
-      id: `usr_${Date.now()}`,
+      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       username: trimmedId,
       password: '1234',
       name: trimmedName,
@@ -212,7 +237,11 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
   };
 
   const handleOpenEditModal = (acc: UserAccount) => {
-    setEditingAccount({ ...acc });
+    setEditingAccount({
+      ...acc,
+      id: acc.id,
+      affiliation: acc.affiliation || '포승공장',
+    });
     setEditOriginalUsername(acc.username);
     setEditError('');
   };
@@ -234,6 +263,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
       return;
     }
 
+    // 자기 자신(고유 id 기준)을 제외한 다른 계정과 로그인 ID 중복 검사
     const duplicate = accounts.find(
       (a) => a.id !== editingAccount.id && a.username.toLowerCase() === trimmedId.toLowerCase()
     );
@@ -249,17 +279,18 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
         ? 'LV.2 사무실관리자'
         : 'LV.1 현장사용자';
 
-    onUpdateAccount(
-      {
-        ...editingAccount,
-        name: trimmedName,
-        username: trimmedId,
-        phone: editingAccount.phone?.trim() || undefined,
-        department: editingAccount.affiliation || editingAccount.department,
-        roleLabel,
-      },
-      editOriginalUsername
-    );
+    const updatedRecord: UserAccount = {
+      ...editingAccount,
+      id: editingAccount.id, // 고유 ID(Primary Key) 고정 유지
+      name: trimmedName,
+      username: trimmedId,
+      phone: editingAccount.phone?.trim() || undefined,
+      affiliation: editingAccount.affiliation || '포승공장',
+      department: editingAccount.affiliation || editingAccount.department || '포승공장',
+      roleLabel,
+    };
+
+    onUpdateAccount(updatedRecord, editOriginalUsername);
     setEditingAccount(null);
   };
 
@@ -269,6 +300,11 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
     const pw = userPasswords[a.username];
     return !pw || pw === '1234';
   }).length;
+
+  const deletingAccountAssignedItems = useMemo(() => {
+    if (!deletingAccount) return [];
+    return itemCountByAccount.get(deletingAccount.id) || [];
+  }, [deletingAccount, itemCountByAccount]);
 
   return (
     <div className="space-y-4 w-full">
@@ -527,7 +563,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                   const isInitial1234 = !customPw || customPw === '1234';
                   const assignedItems = itemCountByAccount.get(acc.id) || [];
                   const isActive = acc.isActive !== false;
-                  const isSelf = currentUser?.username === acc.username;
+                  const isSelf = currentUser?.username === acc.username || acc.username === 'admin';
 
                   return (
                     <tr
@@ -604,15 +640,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                         <div className="inline-flex items-center justify-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `'${acc.name} (${acc.username})' 계정의 비밀번호를 초기값('1234')으로 초기화하시겠습니까?\n\n초기화 후 해당 사용자가 다음 로그인 시 새 비밀번호 변경이 강제됩니다.`
-                                )
-                              ) {
-                                onResetUserPassword(acc.username, acc.name);
-                              }
-                            }}
+                            onClick={() => setResettingAccount(acc)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition-colors cursor-pointer"
                             title="비밀번호를 '1234'로 초기화"
                           >
@@ -641,7 +669,13 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                                 ? 'bg-white hover:bg-slate-100 text-slate-600 border-slate-300 cursor-pointer'
                                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300 cursor-pointer'
                             }`}
-                            title={isSelf ? '현재 로그인 중인 본인 계정은 비활성화할 수 없습니다' : isActive ? '계정 비활성화' : '계정 활성화'}
+                            title={
+                              isSelf
+                                ? '시스템 기본 최고관리자 또는 현재 로그인 계정은 비활성화할 수 없습니다'
+                                : isActive
+                                ? '계정 비활성화'
+                                : '계정 활성화'
+                            }
                           >
                             <Power className="w-3.5 h-3.5" />
                             <span>{isActive ? '비활성화' : '활성화'}</span>
@@ -650,21 +684,17 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                           <button
                             type="button"
                             disabled={isSelf}
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `'${acc.name} (${acc.username})' 계정을 삭제하시겠습니까?\n(담당 품목이 있는 경우 비활성화를 권장합니다)`
-                                )
-                              ) {
-                                onDeleteAccount(acc.id);
-                              }
-                            }}
+                            onClick={() => setDeletingAccount(acc)}
                             className={`p-1.5 rounded-lg border transition-colors ${
                               isSelf
                                 ? 'text-slate-300 border-slate-200 cursor-not-allowed'
                                 : 'text-rose-600 hover:bg-rose-50 border-rose-200 cursor-pointer'
                             }`}
-                            title={isSelf ? '현재 로그인 중인 본인 계정은 삭제할 수 없습니다' : '계정 삭제'}
+                            title={
+                              isSelf
+                                ? '시스템 기본 최고관리자 또는 현재 로그인 계정은 삭제할 수 없습니다'
+                                : '계정 삭제'
+                            }
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -679,14 +709,19 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
         </div>
       </div>
 
-      {/* Edit Account Modal */}
+      {/* Edit Account Modal (Updates strictly by editingAccount.id) */}
       {editingAccount && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-blue-400" />
-                <h4 className="text-sm font-bold">사용자 계정 정보 수정</h4>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-blue-400" />
+                  <h4 className="text-sm font-bold">사용자 계정 정보 수정 (Update)</h4>
+                </div>
+                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  고유 계정 ID: {editingAccount.id}
+                </p>
               </div>
               <button
                 type="button"
@@ -711,7 +746,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                 <select
                   value={editingAccount.affiliation || '포승공장'}
                   onChange={(e) =>
-                    setEditingAccount({ ...editingAccount, affiliation: e.target.value })
+                    setEditingAccount((prev) =>
+                      prev ? { ...prev, affiliation: e.target.value } : null
+                    )
                   }
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-900"
                 >
@@ -731,7 +768,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                   type="text"
                   value={editingAccount.name}
                   onChange={(e) =>
-                    setEditingAccount({ ...editingAccount, name: e.target.value })
+                    setEditingAccount((prev) =>
+                      prev ? { ...prev, name: e.target.value } : null
+                    )
                   }
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-900"
                   required
@@ -746,7 +785,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                   type="text"
                   value={editingAccount.phone || ''}
                   onChange={(e) =>
-                    setEditingAccount({ ...editingAccount, phone: e.target.value })
+                    setEditingAccount((prev) =>
+                      prev ? { ...prev, phone: e.target.value } : null
+                    )
                   }
                   placeholder="예: 010-8899-7721"
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono bg-white text-slate-900"
@@ -761,7 +802,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                   type="text"
                   value={editingAccount.username}
                   onChange={(e) =>
-                    setEditingAccount({ ...editingAccount, username: e.target.value })
+                    setEditingAccount((prev) =>
+                      prev ? { ...prev, username: e.target.value } : null
+                    )
                   }
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono bg-white text-slate-900"
                   required
@@ -775,10 +818,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                 <select
                   value={editingAccount.level}
                   onChange={(e) =>
-                    setEditingAccount({
-                      ...editingAccount,
-                      level: Number(e.target.value) as UserLevel,
-                    })
+                    setEditingAccount((prev) =>
+                      prev ? { ...prev, level: Number(e.target.value) as UserLevel } : null
+                    )
                   }
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-900"
                 >
@@ -800,10 +842,160 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                   type="submit"
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold cursor-pointer"
                 >
-                  저장하기
+                  기존 계정 정보 업데이트 저장
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal (Replaces blocked window.confirm & handles FK/Linked Items) */}
+      {deletingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-rose-950 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <h4 className="text-sm font-bold">사용자 계정 삭제 확인</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingAccount(null)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-sm">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-base font-bold text-slate-900">
+                    {deletingAccount.name}
+                  </span>
+                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                    ID: {deletingAccount.username}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 font-mono">
+                  고유 키(PK): {deletingAccount.id} · 소속: {deletingAccount.affiliation || '포승공장'}
+                </div>
+              </div>
+
+              {deletingAccountAssignedItems.length > 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 space-y-2">
+                  <div className="flex items-start gap-2 text-amber-900 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      현재 [품목 마스터]에서 {deletingAccountAssignedItems.length}개 품목의 수령자(외래 키 참조)로 연결되어 있습니다.
+                    </span>
+                  </div>
+                  <div className="max-h-24 overflow-y-auto text-xs text-amber-800 bg-white/80 rounded p-2 border border-amber-100 space-y-0.5">
+                    {deletingAccountAssignedItems.map((it) => (
+                      <div key={it.id} className="truncate">
+                        • [{it.line}] {it.itemName} ({it.spec})
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    이력 보존을 위해 <strong>[비활성화]</strong>로 전환하거나, 연결된 품목의 담당자 지정을 자동 해제한 뒤 <strong>[영구 삭제]</strong>할 수 있습니다.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  해당 계정에 연결된 담당 품목이 없습니다. 삭제 시 화면 및 데이터베이스에서 즉시 영구 삭제되며 해당 아이디로 로그인이 불가합니다.
+                </p>
+              )}
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setDeletingAccount(null)}
+                  className="px-3.5 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                >
+                  취소
+                </button>
+
+                {deletingAccountAssignedItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteAccount(deletingAccount.id, { mode: 'deactivate' });
+                      setDeletingAccount(null);
+                    }}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    안전하게 비활성화로 전환
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeleteAccount(deletingAccount.id, {
+                      mode: 'delete',
+                      unlinkItems: true,
+                    });
+                    setDeletingAccount(null);
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  {deletingAccountAssignedItems.length > 0
+                    ? '품목 연동 해제 후 영구 삭제'
+                    : '계정 영구 삭제 확정'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Confirmation Modal */}
+      {resettingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-amber-950 text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                <h4 className="text-sm font-bold">비밀번호 초기화(1234) 확인</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResettingAccount(null)}
+                className="text-slate-300 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-700 leading-relaxed">
+                <strong>&apos;{resettingAccount.name} ({resettingAccount.username})&apos;</strong> 계정의 비밀번호를 초기값(<strong>1234</strong>)으로 초기화하시겠습니까?
+              </p>
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
+                초기화 후 해당 사용자가 다음 로그인할 때 새 비밀번호 변경이 강제됩니다.
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setResettingAccount(null)}
+                  className="px-3.5 py-2 border border-slate-300 rounded-lg font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onResetUserPassword(resettingAccount.username, resettingAccount.name);
+                    setResettingAccount(null);
+                  }}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold cursor-pointer"
+                >
+                  1234로 초기화 확정
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

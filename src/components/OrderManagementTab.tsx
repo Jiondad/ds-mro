@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { EditOrderModal } from './EditOrderModal';
 import { EditHistoryModal } from './EditHistoryModal';
+import { useUrlPersistedState } from '../utils/urlState';
 
 interface OrderManagementTabProps {
   items: CalculatedItem[];
@@ -78,6 +79,9 @@ interface OrderManagementTabProps {
   onShowToast: (message: string) => void;
 }
 
+const VALID_ORDER_SUB_TABS = ['create', 'history'] as const;
+const VALID_ORDER_FILTER_MODES = ['needed', 'imminent', 'all'] as const;
+
 export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
   items,
   vendors,
@@ -94,18 +98,36 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 }) => {
   const activeProfile = companyProfile || INITIAL_COMPANY_PROFILE;
   // Main Sub-Tab: 'create' (신규 발주서 작성) vs 'history' (발주 진행 & 이력 관리)
-  const [activeSubTab, setActiveSubTab] = useState<'create' | 'history'>('create');
+  const [activeSubTab, setActiveSubTab] = useUrlPersistedState<'create' | 'history'>(
+    'orderSub',
+    'ds_mro_order_sub_tab',
+    'create',
+    VALID_ORDER_SUB_TABS
+  );
 
   // Modal states for editing
   const [editingOrderItem, setEditingOrderItem] = useState<CalculatedItem | null>(null);
   const [editingHistoryRecord, setEditingHistoryRecord] = useState<OrderHistoryRecord | null>(null);
 
   // History filtering
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<'전체' | OrderHistoryStatus>('전체');
-  const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useUrlPersistedState<'전체' | OrderHistoryStatus>(
+    'histStatus',
+    'ds_mro_order_hist_status',
+    '전체'
+  );
+  const [historySearchQuery, setHistorySearchQuery] = useUrlPersistedState<string>(
+    'histQ',
+    'ds_mro_order_hist_q',
+    ''
+  );
 
   // Mode: Show only items needing order OR imminent OR all items
-  const [filterMode, setFilterMode] = useState<'needed' | 'imminent' | 'all'>('needed');
+  const [filterMode, setFilterMode] = useUrlPersistedState<'needed' | 'imminent' | 'all'>(
+    'orderMode',
+    'ds_mro_order_filter_mode',
+    'needed',
+    VALID_ORDER_FILTER_MODES
+  );
 
   // Track expanded other items per vendor
   const [expandedVendors, setExpandedVendors] = useState<Record<string, boolean>>({});

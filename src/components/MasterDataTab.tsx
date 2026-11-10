@@ -13,6 +13,7 @@ import {
   formatCurrency,
   compareItemsByDefaultOrder,
 } from '../utils/calculations';
+import { useUrlPersistedState } from '../utils/urlState';
 import {
   Settings,
   Plus,
@@ -53,6 +54,8 @@ interface MasterDataTabProps {
   onShowToast?: (message: string) => void;
 }
 
+const VALID_MASTER_SUB_TABS = ['item', 'category', 'vendor', 'unit', 'company'] as const;
+
 export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   items = [],
   categories,
@@ -76,8 +79,17 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   onUpdateCompanyProfile,
   onShowToast,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'item' | 'category' | 'vendor' | 'unit' | 'company'>('item');
-  const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [activeSubTab, setActiveSubTab] = useUrlPersistedState<'item' | 'category' | 'vendor' | 'unit' | 'company'>(
+    'masterSub',
+    'ds_mro_master_sub_tab',
+    'item',
+    VALID_MASTER_SUB_TABS
+  );
+  const [itemSearchQuery, setItemSearchQuery] = useUrlPersistedState<string>(
+    'masterQ',
+    'ds_mro_master_search',
+    ''
+  );
 
   // Company Profile form state
   const [profileForm, setProfileForm] = useState<CompanyProfile>(() => {

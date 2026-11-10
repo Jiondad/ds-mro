@@ -8,6 +8,7 @@ import {
   isAsanLine,
   matchLineFilter,
 } from '../utils/calculations';
+import { useUrlPersistedState } from '../utils/urlState';
 import {
   Search,
   AlertTriangle,
@@ -67,17 +68,35 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   isWorkerMode = false,
   onNavigateToFieldAudit,
 }) => {
-  // Filter states
-  const [selectedLine, setSelectedLine] = useState<string>('전체');
-  const [selectedCategory, setSelectedCategory] = useState<string>('전체');
-  const [selectedStatus, setSelectedStatus] = useState<
+  // Filter states (persisted across F5 refresh & URL query params)
+  const [selectedLine, setSelectedLine] = useUrlPersistedState<string>(
+    'dashLine',
+    'ds_mro_dash_line',
+    '전체'
+  );
+  const [selectedCategory, setSelectedCategory] = useUrlPersistedState<string>(
+    'dashCat',
+    'ds_mro_dash_cat',
+    '전체'
+  );
+  const [selectedStatus, setSelectedStatus] = useUrlPersistedState<
     '전체' | '발주필요' | '임박포함' | '입고대기' | '실사지연'
-  >('전체');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  >('dashStatus', 'ds_mro_dash_status', '전체');
+  const [searchQuery, setSearchQuery] = useUrlPersistedState<string>(
+    'dashQ',
+    'ds_mro_dash_q',
+    ''
+  );
 
   // Default sort is fixed: '라인 > 카테고리 > 품목명' (실사재고/일사용량 수정 시 행 점프 없음)
-  const [sortField, setSortField] = useState<'default' | 'remainingDays' | 'line' | 'itemName'>('default');
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
+  const [sortField, setSortField] = useUrlPersistedState<
+    'default' | 'remainingDays' | 'line' | 'itemName'
+  >('dashSort', 'ds_mro_dash_sort', 'default');
+  const [sortAsc, setSortAsc] = useUrlPersistedState<boolean>(
+    'dashAsc',
+    'ds_mro_dash_asc',
+    true
+  );
 
   // Category order mapping for master data sort
   const categoryOrderMap = useMemo(() => {
