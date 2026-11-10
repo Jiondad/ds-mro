@@ -122,7 +122,55 @@ export type ActiveTab =
   | 'order-sheet'
   | 'master-data'
   | 'stats'
-  | 'account-management';
+  | 'account-management'
+  | 'audit-log';
+
+/**
+ * 데이터 변경 이력(Audit Log) 작업 유형
+ */
+export type AuditActionType =
+  | 'STOCK_UPDATE'            // 재고 실사 수량 변경 (➕/➖ 또는 직접 입력)
+  | 'STOCK_BATCH_AUDIT'      // 실사 수량 일괄 확정
+  | 'RECEIVE_CONFIRM'        // 입고 확정 처리
+  | 'ORDER_CREATE'           // 거래처 발주서 발행
+  | 'ORDER_UPDATE'           // 발주 내용(수량/납기 등) 수정
+  | 'ORDER_CANCEL'           // 발주 취소
+  | 'ORDER_HISTORY_DELETE'   // 발주 이력 삭제
+  | 'SAFETY_STOCK_CALIBRATE' // 안전재고/일소모량 동적 보정
+  | 'ITEM_CREATE'            // 신규 품목 등록
+  | 'ITEM_UPDATE'            // 품목 마스터 수정
+  | 'ITEM_DELETE'            // 품목 삭제
+  | 'ITEM_RECEIVER_ASSIGN'   // 담당 수령인 지정/변경
+  | 'ITEM_LOCATION_UPDATE'   // 하역/납품 장소 변경
+  | 'ITEM_LINE_UPDATE'       // 소속 생산라인 변경
+  | 'CATEGORY_MUTATE'        // 카테고리 추가/수정/삭제
+  | 'VENDOR_MUTATE'          // 거래처 추가/수정/삭제
+  | 'ACCOUNT_MUTATE'         // 사용자 계정 생성/수정/삭제/비밀번호 변경
+  | 'SYSTEM_RESET';          // 초기 데이터 리셋
+
+/**
+ * 데이터 변경 로그 (Audit Log Record)
+ */
+export interface AuditLogRecord {
+  id: string; // 고유 로그 ID (예: log_1731234567890_abc)
+  timestamp: string; // 작업 일시 (YYYY-MM-DD HH:mm:ss)
+  timestampMs: number; // 밀리초 타임스탬프 (정렬용)
+  operatorId: string; // 작업자 아이디 (예: admin, field_mgr)
+  operatorName: string; // 작업자 성명 (예: 김종현 실장, 박현장 반장)
+  operatorLevel: UserLevel; // 작업자 권한 레벨 (0: 최고, 1: 현장관리, 2: 현장실무, 3: 사무실)
+  operatorRoleLabel: string; // 역할 라벨 (예: 'LV.0 최고관리자')
+  operatorAffiliation?: string; // 소속/부서 (예: 포승공장, SL1라인, 구매자재팀)
+  actionType: AuditActionType; // 작업 유형 코드
+  actionLabel: string; // 한글 작업 유형 명칭 (예: '재고 실사', '입고 확정', '발주서 발행' 등)
+  targetName: string; // 대상 명칭 (품목명 + 규격, 계정명, 카테고리명 등)
+  targetLine?: ProductionLine | string; // 대상 라인 (SL1, SL2, 공용, 아산 등)
+  targetId?: string; // 대상 데이터 고유 ID
+  categoryName?: string; // 소모품 카테고리명
+  beforeValue: string; // 변경 전 값
+  afterValue: string; // 변경 후 값
+  details?: string; // 세부 비고/차이 내역 (예: '소모 -2박스 반영', '납기 11/15')
+  ipOrDevice?: string; // 작업 환경 (예: 'PC 웹', '모바일 현장')
+}
 
 export type OrderHistoryStatus = '입고대기' | '입고완료' | '발주취소';
 

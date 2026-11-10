@@ -17,7 +17,9 @@ export type PermissionAction =
   | 'manage_master_data'      // 기준정보(품목/카테고리/거래처 등) 관리
   | 'manage_user_accounts'    // 사용자 계정 관리(생성/수정/삭제/비밀번호 초기화)
   | 'reset_system_data'       // 전체 초기 데이터 리셋
-  | 'manage_db_config';       // Supabase DB 클라우드 환경설정
+  | 'manage_db_config'        // Supabase DB 클라우드 환경설정
+  | 'view_audit_logs'         // 데이터 변경 이력(Audit Log) 조회
+  | 'clear_audit_logs';       // 데이터 변경 이력 전체 초기화
 
 export interface RoleInfo {
   level: UserLevel;
@@ -42,6 +44,7 @@ export const ROLE_INFOS: Record<UserLevel, RoleInfo> = {
       'stats',
       'master-data',
       'account-management',
+      'audit-log',
     ],
   },
   1: {
@@ -49,8 +52,8 @@ export const ROLE_INFOS: Record<UserLevel, RoleInfo> = {
     roleName: '현장관리자',
     roleLabel: 'LV.1 현장관리자',
     badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-    desc: '현장 내 모든 라인의 재고/실사/사용량 데이터 수정 및 모니터링/통계 관리 (발주 및 기준정보 불가)',
-    allowedTabs: ['dashboard', 'field-audit', 'stats'],
+    desc: '현장 내 모든 라인의 재고/실사/사용량 데이터 수정 및 모니터링/통계/변경이력 관리 (발주 및 기준정보 불가)',
+    allowedTabs: ['dashboard', 'field-audit', 'stats', 'audit-log'],
   },
   2: {
     level: 2,
@@ -65,8 +68,8 @@ export const ROLE_INFOS: Record<UserLevel, RoleInfo> = {
     roleName: '사무실사용자',
     roleLabel: 'LV.3 사무실사용자',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    desc: '거래처 발주서 발행 및 발주 관리, 전사 사용량/재고 통계 분석 (현장 자재/실사 수정 불가)',
-    allowedTabs: ['dashboard', 'order-sheet', 'stats'],
+    desc: '거래처 발주서 발행 및 발주 관리, 전사 사용량/재고 통계 및 변경이력 분석 (현장 자재/실사 수정 불가)',
+    allowedTabs: ['dashboard', 'order-sheet', 'stats', 'audit-log'],
   },
 };
 
@@ -110,6 +113,9 @@ export function getTabAccessDeniedReason(tab: ActiveTab, user: UserAccount | nul
     }
     if (tab === 'stats') {
       return '⚠️ [권한 제한] 현장사용자(Level 2)는 사용량 통계 분석 메뉴에 접근할 수 없습니다.';
+    }
+    if (tab === 'audit-log') {
+      return '⚠️ [권한 제한] 현장사용자(Level 2)는 데이터 변경 로그(Audit Log) 메뉴에 접근할 수 없습니다.';
     }
     if (tab === 'master-data' || tab === 'account-management') {
       return '⚠️ [권한 제한] 기준정보 및 계정 관리는 최고관리자(Level 0) 전용 메뉴입니다.';
@@ -313,6 +319,25 @@ export function checkPermission(
         allowed: false,
         reason: '⚠️ 기준정보 관리는 최고관리자(Level 0) 전용 메뉴입니다.',
       };
+
+    case 'view_audit_logs': {
+      // Level 0 is already returned true at top of checkPermission; Level 1, 3 allowed here
+      if (user.level === 1 || user.level === 3) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        reason: '⚠️ 데이터 변경 이력(Audit Log) 조회 권한이 없습니다.',
+      };
+    }
+
+    case 'clear_audit_logs': {
+      // Level 0 is already returned true at top of checkPermission; Level 1, 2, 3 denied
+      return {
+        allowed: false,
+        reason: '⚠️ 데이터 변경 이력 초기화는 최고관리자(Level 0) 전용 권한입니다.',
+      };
+    }
 
     case 'manage_user_accounts':
     case 'reset_system_data':

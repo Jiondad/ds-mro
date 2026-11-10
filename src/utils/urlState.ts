@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ActiveTab, UserAccount } from '../types';
-
-export const STORAGE_KEY_ACTIVE_TAB = 'daeseong_steel_active_tab_v1';
+import { isTabAllowed } from './rbac';
 
 export const VALID_ACTIVE_TABS: readonly ActiveTab[] = [
   'dashboard',
@@ -10,6 +9,7 @@ export const VALID_ACTIVE_TABS: readonly ActiveTab[] = [
   'master-data',
   'stats',
   'account-management',
+  'audit-log',
 ] as const;
 
 export function isValidActiveTab(val: string | null | undefined): val is ActiveTab {
@@ -52,8 +52,6 @@ export function extractTabFromLocation(): ActiveTab | null {
   return null;
 }
 
-import { isTabAllowed } from './rbac';
-
 /**
  * 4단계 사용자 권한(RBAC) 및 작업자 모드 여부를 고려하여 허용 가능한 탭으로 보정합니다.
  */
@@ -95,7 +93,7 @@ export function enforceTabRBAC(
 
 /**
  * 새로고침(F5) 또는 직접 URL 진입 시 초기 활성 탭을 결정합니다.
- * 우선순위: 1) URL(?tab=, #hash, /path) -> 2) localStorage 저장 탭 -> 3) 권한별 기본 탭
+ * 우선순위: 1) URL(?tab=, #hash, /path) -> 2) 권한별 기본 탭
  */
 export function resolveInitialActiveTab(
   user: UserAccount | null,
@@ -105,13 +103,6 @@ export function resolveInitialActiveTab(
   if (urlTab) {
     return enforceTabRBAC(urlTab, user, isWorkerMode);
   }
-
-  try {
-    const savedTab = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB)?.trim();
-    if (isValidActiveTab(savedTab)) {
-      return enforceTabRBAC(savedTab, user, isWorkerMode);
-    }
-  } catch {}
 
   if (!user) return 'dashboard';
 
@@ -128,18 +119,13 @@ export function resolveInitialActiveTab(
 }
 
 /**
- * 현재 활성 탭을 URL 쿼리 파라미터(?tab=...) 및 localStorage에 동기화합니다.
+ * 현재 활성 탭을 URL 쿼리 파라미터(?tab=...)에 동기화합니다.
  */
 export function syncActiveTabToUrl(tab: ActiveTab, pushHistory = false): void {
   if (typeof window === 'undefined') return;
 
   try {
-    localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, tab);
-  } catch {}
-
-  try {
     const url = new URL(window.location.href);
-    // 하위 경로(/ds-mro/account-management 등)로 들어온 경우 베이스 경로(/ds-mro/ 또는 /)로 정규화하여 새로고침 시 404 방지
     const isDsMroBase =
       url.pathname === '/ds-mro' || url.pathname.startsWith('/ds-mro/');
     url.pathname = isDsMroBase ? '/ds-mro/' : '/';
@@ -159,12 +145,12 @@ export function syncActiveTabToUrl(tab: ActiveTab, pushHistory = false): void {
 }
 
 /**
- * 각 탭 내부의 서브 탭, 공장/라인 필터, 상태 필터 등을 URLSearchParams 및 Storage에 양방향 동기화하는 훅입니다.
- * 새로고침(F5)이나 뒤로가기/앞으로가기 시에도 필터 및 하위 화면 상태가 그대로 유지됩니다.
+ * 각 탭 내부의 서브 탭, 공장/라인 필터, 상태 필터 등을 URLSearchParams에 동기화하는 훅입니다.
+ * 로컬 스토리지 의존성 없이 URL 쿼리 파라미터만으로 필터 상태를 관리합니다.
  */
 export function useUrlPersistedState<T extends string | boolean>(
   paramKey: string,
-  storageKey: string,
+  _storageKey: string,
   defaultValue: T,
   validValues?: readonly T[]
 ): [T, (next: T | ((prev: T) => T)) => void] {
@@ -191,33 +177,21 @@ export function useUrlPersistedState<T extends string | boolean>(
     if (typeof window === 'undefined') return defaultValue;
 
     try {
-      // 1. URL 쿼리 파라미터 우선 확인
       const params = new URLSearchParams(window.location.search);
       const fromUrl = parseValue(params.get(paramKey));
       if (fromUrl !== null) return fromUrl;
-
-      // 2. sessionStorage / localStorage 백업 확인
-      const fromSession = parseValue(sessionStorage.getItem(storageKey));
-      if (fromSession !== null) return fromSession;
-
-      const fromLocal = parseValue(localStorage.getItem(storageKey));
-      if (fromLocal !== null) return fromLocal;
     } catch {}
 
     return defaultValue;
-  }, [defaultValue, paramKey, parseValue, storageKey]);
+  }, [defaultValue, paramKey, parseValue]);
 
   const [state, setState] = useState<T>(readInitialValue);
 
-  // 상태 변경 시 URLSearchParams 및 Storage 동기화
+  // 상태 변경 시 URLSearchParams 동기화
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const serialized = String(state);
-    try {
-      sessionStorage.setItem(storageKey, serialized);
-      localStorage.setItem(storageKey, serialized);
-    } catch {}
 
     try {
       const url = new URL(window.location.href);
@@ -232,7 +206,7 @@ export function useUrlPersistedState<T extends string | boolean>(
         window.history.replaceState(window.history.state, '', nextUrl);
       }
     } catch {}
-  }, [state, paramKey, storageKey, defaultValue]);
+  }, [state, paramKey, defaultValue]);
 
   // 브라우저 뒤로가기/앞으로가기(popstate) 시 상태 복원
   useEffect(() => {

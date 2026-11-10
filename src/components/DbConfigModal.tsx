@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import {
   getSavedSupabaseConfig,
-  getSupabaseClient,
-  STORAGE_KEY_SUPABASE_CONFIG,
+  purgeLegacyLocalStorageData,
+  setRuntimeSupabaseConfig,
   SupabaseConfig,
   testSupabaseConnection,
 } from '../lib/supabase';
@@ -82,39 +82,39 @@ export const DbConfigModal: React.FC<DbConfigModalProps> = ({
     };
 
     try {
-      localStorage.setItem(STORAGE_KEY_SUPABASE_CONFIG, JSON.stringify(newConfig));
-      getSupabaseClient(); // 싱글톤 클라이언트 재초기화
+      purgeLegacyLocalStorageData();
+      setRuntimeSupabaseConfig(newConfig);
       setUpdatedAt(nowStr);
       setStatusMessage({
         type: 'success',
-        text: `${result.message} 설정이 안전하게 저장되었습니다.`,
+        text: `${result.message} 클라우드 DB 단일 연동 모드가 활성화되었습니다.`,
       });
       onConfigSaved(true);
       if (onShowToast) {
-        onShowToast('Supabase 클라우드 DB 환경설정이 연결 및 저장되었습니다.');
+        onShowToast('Supabase 클라우드 DB 환경설정이 연결되었으며 실시간 데이터를 불러옵니다.');
       }
     } catch (err) {
       setStatusMessage({
         type: 'error',
-        text: '브라우저 localStorage에 설정을 저장하는 중 오류가 발생했습니다.',
+        text: 'DB 연결 설정을 적용하는 중 오류가 발생했습니다.',
       });
     }
   };
 
   const handleClearConfig = () => {
     try {
-      localStorage.removeItem(STORAGE_KEY_SUPABASE_CONFIG);
-      getSupabaseClient();
+      purgeLegacyLocalStorageData();
+      setRuntimeSupabaseConfig(null);
       setUrl('');
       setAnonKey('');
       setUpdatedAt(undefined);
       setStatusMessage({
         type: 'info',
-        text: '저장된 Supabase 연결 정보가 초기화되었으며 로컬 스토리지 모드로 동작합니다.',
+        text: '저장된 Supabase 연결 정보 및 브라우저 잔여 캐시가 모두 초기화되었습니다.',
       });
       onConfigSaved(false);
       if (onShowToast) {
-        onShowToast('Supabase DB 연결 설정이 초기화되었습니다.');
+        onShowToast('Supabase DB 연결 설정 및 로컬 캐시가 초기화되었습니다.');
       }
     } catch (e) {
       console.error('Failed to clear Supabase config', e);
@@ -133,14 +133,14 @@ export const DbConfigModal: React.FC<DbConfigModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-black tracking-tight text-white">
-                  Supabase 클라우드 DB 환경설정
+                  Supabase 클라우드 DB 단일 연동 설정
                 </h3>
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-600 text-white border border-indigo-400">
                   LV.0 전용
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                대성스틸 MRO 클라우드 데이터베이스 연동 및 상태 점검
+                로컬 스토리지 캐시 없이 오직 Supabase 클라우드 DB와 실시간 직접 통신합니다
               </p>
             </div>
           </div>
@@ -159,25 +159,25 @@ export const DbConfigModal: React.FC<DbConfigModalProps> = ({
             className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
               isCurrentlyConfigured
                 ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-                : 'bg-slate-50 border-slate-200 text-slate-700'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
             }`}
           >
             <div className="flex items-center gap-2">
               <span
                 className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                  isCurrentlyConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                  isCurrentlyConfigured ? 'bg-emerald-500' : 'bg-amber-500'
                 }`}
               />
               <div>
                 <div className="font-bold">
                   현재 상태:{' '}
                   {isCurrentlyConfigured
-                    ? 'Supabase 클라우드 연동 구성됨'
-                    : '로컬 스토리지(Local) 단독 운영 중'}
+                    ? 'Supabase 클라우드 DB 다이렉트 연동 중'
+                    : 'Supabase 클라우드 DB 연결 설정 필요'}
                 </div>
                 {updatedAt && (
                   <div className="text-[11px] text-slate-500 mt-0.5">
-                    최근 저장 일시: {updatedAt}
+                    최근 연결 일시: {updatedAt}
                   </div>
                 )}
               </div>

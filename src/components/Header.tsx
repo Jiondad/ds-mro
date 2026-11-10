@@ -15,6 +15,8 @@ import {
   Briefcase,
   Database,
   Users,
+  History,
+  RefreshCw,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -31,6 +33,8 @@ interface HeaderProps {
   onLogout?: () => void;
   onOpenDbConfig?: () => void;
   isDbConnected?: boolean;
+  onRefreshCloudData?: () => void;
+  isCloudSyncing?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,6 +51,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onOpenDbConfig,
   isDbConnected = false,
+  onRefreshCloudData,
+  isCloudSyncing = false,
 }) => {
   const userLevel = currentUser?.level ?? 0;
   // LV.2 현장사용자이거나 현장 계정에서 수동 작업자 모드가 켜진 경우 현장 중심 UI 적용 (LV.3 사무실사용자는 작업자모드 제외)
@@ -57,6 +63,8 @@ export const Header: React.FC<HeaderProps> = ({
   const canAccessOrderSheet = (userLevel === 0 || userLevel === 3) && !isEffectiveWorkerView;
   // 사용량 통계 접근 가능 여부 (LV.0 최고관리자, LV.1 현장관리자, LV.3 사무실사용자 허용 / LV.2 불가)
   const canAccessStats = (userLevel === 0 || userLevel === 1 || userLevel === 3) && !isEffectiveWorkerView;
+  // 변경 이력(Audit Log) 접근 가능 여부 (LV.0, LV.1, LV.3 허용)
+  const canAccessAuditLog = (userLevel === 0 || userLevel === 1 || userLevel === 3) && !isEffectiveWorkerView;
   // 현장 실사 & 입고 접근 가능 여부 (LV.0, LV.1, LV.2 허용 / LV.3 사무실사용자는 현장 수정 불가이므로 메인 네비게이션에서 제외)
   const canAccessFieldAudit = userLevel === 0 || userLevel === 1 || userLevel === 2;
 
@@ -334,6 +342,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
+              {canAccessAuditLog && (
+                <button
+                  onClick={() => onTabChange('audit-log')}
+                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 text-xs xl:text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    activeTab === 'audit-log'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
+                  <span>변경 이력</span>
+                </button>
+              )}
+
               {canAccessMasterData && (
                 <button
                   onClick={() => onTabChange('account-management')}
@@ -422,6 +444,19 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </div>
 
+                {onRefreshCloudData && (
+                  <button
+                    type="button"
+                    onClick={onRefreshCloudData}
+                    disabled={isCloudSyncing}
+                    className="p-1.5 rounded-lg border bg-slate-800/90 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Supabase 클라우드 DB 최신 라이브 데이터 새로고침"
+                    aria-label="클라우드 DB 새로고침"
+                  >
+                    <RefreshCw className={`w-4 h-4 shrink-0 ${isCloudSyncing ? 'animate-spin text-emerald-400' : ''}`} />
+                  </button>
+                )}
+
                 {currentUser.level === 0 && onOpenDbConfig && (
                   <button
                     type="button"
@@ -455,16 +490,16 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Worker Mode / LV.1 Field User Active Banner */}
+      {/* Worker Mode / LV.2 Field User Active Banner */}
       {isEffectiveWorkerView && (
         <div className="bg-amber-400 text-slate-950 px-3 sm:px-6 py-1.5 text-xs font-bold border-t border-amber-500/40">
           <div className="w-full max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="px-1.5 py-0.5 bg-slate-950 text-amber-400 rounded text-[10px] font-black">
-                {userLevel === 1 ? 'LV.1 현장사용자 전용 뷰' : 'WORKER VIEW'}
+                {userLevel === 2 ? 'LV.2 현장사용자 전용 뷰' : 'WORKER VIEW'}
               </span>
               <span>
-                {userLevel === 1 ? (
+                {userLevel === 2 ? (
                   <>
                     <strong>
                       {currentUser ? getCompactProfileLabel(currentUser) : '현장사용자'}
@@ -480,7 +515,7 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </span>
             </div>
-            {userLevel !== 1 && onToggleWorkerMode && (
+            {userLevel !== 2 && onToggleWorkerMode && (
               <button
                 type="button"
                 onClick={onToggleWorkerMode}
