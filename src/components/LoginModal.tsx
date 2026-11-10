@@ -54,8 +54,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   userPasswords = {},
   registeredUsers = SYSTEM_USERS,
 }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('1234');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
@@ -103,7 +103,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleLoginSubmit} className="p-6 space-y-3.5 text-xs">
+        <form onSubmit={handleLoginSubmit} className="p-6 space-y-4 text-xs">
           {errorMsg && (
             <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg font-bold text-center">
               {errorMsg}
@@ -111,14 +111,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           )}
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">아이디 (ID)</label>
+            <label className="block font-bold text-slate-700 mb-1.5">아이디 (ID)</label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="아이디를 입력하세요 (예: admin, field_sl1)"
+                placeholder="아이디를 입력하세요"
+                autoComplete="username"
                 required
                 className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 font-medium bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
@@ -126,14 +127,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">비밀번호 (Password)</label>
+            <label className="block font-bold text-slate-700 mb-1.5">비밀번호 (Password)</label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호 입력 (신규/초기화 계정: 1234)"
+                placeholder="비밀번호를 입력하세요"
+                autoComplete="current-password"
                 required
                 className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 font-mono bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
@@ -147,33 +149,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             >
               로그인 (Sign In)
             </button>
-          </div>
-
-          {/* Quick RBAC Role Selector for convenience */}
-          <div className="pt-3 border-t border-slate-200">
-            <span className="block text-[11px] font-bold text-slate-500 mb-1.5 text-center">
-              권한별 테스트 계정 간편 선택 (초기PW: 1234)
-            </span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {SYSTEM_USERS.map((su) => (
-                <button
-                  key={su.id}
-                  type="button"
-                  onClick={() => {
-                    setUsername(su.username);
-                    setPassword('1234');
-                  }}
-                  className={`px-2 py-1.5 rounded-lg border text-left transition-colors cursor-pointer text-[11px] ${
-                    username === su.username
-                      ? 'border-blue-500 bg-blue-50/80 font-bold text-blue-900'
-                      : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium'
-                  }`}
-                >
-                  <div className="truncate font-bold">{su.roleLabel}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{su.name} ({su.username})</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Password Change Trigger */}
