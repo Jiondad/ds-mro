@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { CalculatedItem, Category, ProductionLine } from '../types';
+import { CalculatedItem, Category, ProductionLine, UserAccount } from '../types';
 import {
   formatNumber,
   compareItemsByDefaultOrder,
@@ -22,11 +22,15 @@ import {
   X,
   AlertTriangle,
   HardHat,
+  UserCheck,
+  Lock,
 } from 'lucide-react';
 
 interface FieldAuditTabProps {
   items: CalculatedItem[];
   categories: Category[];
+  userAccounts?: UserAccount[];
+  currentUser?: UserAccount | null;
   isWorkerMode?: boolean;
   onUpdateStock: (itemId: string, newPackStock: number) => void;
   onReceiveStock: (
@@ -41,6 +45,8 @@ interface FieldAuditTabProps {
 export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   items,
   categories,
+  userAccounts = [],
+  currentUser = null,
   isWorkerMode = false,
   onUpdateStock,
   onReceiveStock,
@@ -58,6 +64,13 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   const [selectedCategory, setSelectedCategory] = useUrlPersistedState<string>(
     'auditCat',
     'ds_mro_audit_cat',
+    '전체'
+  );
+
+  // Receiver (수령인/담당자) filter
+  const [selectedReceiver, setSelectedReceiver] = useUrlPersistedState<string>(
+    'auditReceiver',
+    'ds_mro_audit_receiver',
     '전체'
   );
 
@@ -286,11 +299,106 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   const totalNeededCount = items.filter((i) => i.needsOrder).length;
   const totalImminentCount = items.filter((i) => i.isOrderImminent).length;
 
+  // Helper: check if an item belongs to a specific UserAccount
+  const doesItemMatchAccount = (item: CalculatedItem, acc: UserAccount) => {
+    if (item.receiverLoginId && item.receiverLoginId.trim() === acc.username.trim()) {
+      return true;
+    }
+    const itemRecName = (item.receiverName || '').trim();
+    if (!itemRecName) return false;
+    const accName = acc.name.trim();
+    const accFullName =
+      acc.title && !accName.includes(acc.title)
+        ? `${accName} ${acc.title}`.trim()
+        : accName;
+    return (
+      itemRecName === accName ||
+      itemRecName === accFullName ||
+      itemRecName.startsWith(accName + ' ')
+    );
+  };
+
+  // 최상위 관리자 계정 여부 판별 (최상위 관리자는 모든 품목의 실사 및 입고확정을 예외 없이 조작 가능)
+  const isTopAdminUser = useMemo(() => {
+    if (!currentUser) return true;
+    if (currentUser.level === 0 || currentUser.username === 'admin') return true;
+    if ((currentUser.roleLabel || '').includes('최고관리자')) return true;
+    return false;
+  }, [currentUser]);
+
+  // 현재 로그인한 사용자가 해당 품목 행의 실사 수량 입력 및 입고확정을 조작할 수 있는지 판별
+  const canUserEditItem = (item: CalculatedItem): boolean => {
+    if (isTopAdminUser || !currentUser) return true;
+    return doesItemMatchAccount(item, currentUser);
+  };
+
+  // Simple receiver options from registered userAccounts
+  const receiverOptions = useMemo(() => {
+    return userAccounts
+      .filter((u) => u.isActive !== false)
+      .map((acc) => {
+        const fullName =
+          acc.title && !acc.name.includes(acc.title)
+            ? `${acc.name} ${acc.title}`
+            : acc.name;
+        const aff = acc.affiliation || '현장';
+        const count = items.filter((it) => doesItemMatchAccount(it, acc)).length;
+        return {
+          value: acc.username,
+          label: `[${aff}] ${fullName} (${count}건)`,
+          shortLabel: `[${aff}] ${fullName}`,
+          count,
+        };
+      });
+  }, [userAccounts, items]);
+
+  const unassignedReceiverCount = useMemo(() => {
+    return items.filter(
+      (it) => !it.receiverLoginId && !(it.receiverName && it.receiverName.trim())
+    ).length;
+  }, [items]);
+
+  // Helper to get formatted receiver label for a single item
+  const getItemReceiverDisplay = (item: CalculatedItem): string | null => {
+    const matchedAcc = userAccounts.find((acc) => doesItemMatchAccount(item, acc));
+    if (matchedAcc) {
+      const fullName =
+        matchedAcc.title && !matchedAcc.name.includes(matchedAcc.title)
+          ? `${matchedAcc.name} ${matchedAcc.title}`
+          : matchedAcc.name;
+      return `[${matchedAcc.affiliation || '현장'}] ${fullName}`;
+    }
+    if (item.receiverName && item.receiverName.trim()) {
+      return `[${getLineShortLabel(item.line)}] ${item.receiverName.trim()}`;
+    }
+    return null;
+  };
+
   // Filter items
   const filteredItems = items.filter((item) => {
     if (!matchLineFilter(item.line, selectedLine)) return false;
     if (selectedCategory !== '전체' && item.categoryId !== selectedCategory)
       return false;
+
+    // Simple receiver filter
+    if (selectedReceiver !== '전체') {
+      if (selectedReceiver === '미지정') {
+        const isUnassigned =
+          !item.receiverLoginId && !(item.receiverName && item.receiverName.trim());
+        if (!isUnassigned) return false;
+      } else {
+        const acc = userAccounts.find((u) => u.username === selectedReceiver);
+        if (acc) {
+          if (!doesItemMatchAccount(item, acc)) return false;
+        } else if (
+          item.receiverLoginId !== selectedReceiver &&
+          (item.receiverName || '').trim() !== selectedReceiver
+        ) {
+          return false;
+        }
+      }
+    }
+
     if (filterOnlyAwaiting && item.orderStatus !== '발주완료(입고대기)')
       return false;
     if (filterOnlyAuditDelayed && !item.isAuditDelayed)
@@ -301,7 +409,16 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
       const matchSpec = item.spec.toLowerCase().includes(q);
       const matchVendor = item.vendorName.toLowerCase().includes(q);
       const matchCategory = item.categoryName.toLowerCase().includes(q);
-      if (!matchName && !matchSpec && !matchVendor && !matchCategory)
+      const matchReceiver =
+        (item.receiverName || '').toLowerCase().includes(q) ||
+        (item.receiverLoginId || '').toLowerCase().includes(q);
+      if (
+        !matchName &&
+        !matchSpec &&
+        !matchVendor &&
+        !matchCategory &&
+        !matchReceiver
+      )
         return false;
     }
     return true;
@@ -409,7 +526,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
           </div>
 
           {/* Category Dropdown right next to Line buttons */}
-          <div className="w-full sm:w-56">
+          <div className="w-full sm:w-48">
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
@@ -423,6 +540,51 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Receiver (수령인/담당자) Dropdown Selector */}
+          <div className="relative flex items-center w-full sm:w-56">
+            <UserCheck
+              className={`w-3.5 h-3.5 absolute left-2.5 pointer-events-none ${
+                selectedReceiver !== '전체' ? 'text-blue-600' : 'text-slate-400'
+              }`}
+            />
+            <select
+              value={selectedReceiver}
+              onChange={(e) => setSelectedReceiver(e.target.value)}
+              className={`w-full text-xs font-semibold border rounded-md py-1.5 pl-8 ${
+                selectedReceiver !== '전체' ? 'pr-7' : 'pr-2'
+              } focus:ring-1 focus:ring-blue-500 whitespace-nowrap shadow-2xs transition-colors cursor-pointer ${
+                selectedReceiver !== '전체'
+                  ? 'border-blue-500 bg-blue-50/70 text-blue-900 font-bold ring-1 ring-blue-200'
+                  : 'border-slate-300 bg-white text-slate-800'
+              }`}
+              title="수령인(담당자)별 담당 품목 필터링"
+            >
+              <option value="전체">
+                모든 수령인·담당자 (전체 {items.length}건)
+              </option>
+              {receiverOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+              {unassignedReceiverCount > 0 && (
+                <option value="미지정">
+                  [미지정] 담당자 미지정 품목 ({unassignedReceiverCount}건)
+                </option>
+              )}
+            </select>
+            {selectedReceiver !== '전체' && (
+              <button
+                type="button"
+                onClick={() => setSelectedReceiver('전체')}
+                className="absolute right-2 text-blue-500 hover:text-blue-800 p-0.5 rounded cursor-pointer"
+                title="수령인 필터 해제"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Right: Search box + Awaiting Filter Toggle + Sorting indicator */}
@@ -432,7 +594,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
             <input
               type="text"
-              placeholder="품목·규격·업체 검색..."
+              placeholder="품목·규격·업체·수령인 검색..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full text-xs border border-slate-300 rounded-md pl-8 pr-12 py-1.5 bg-white text-slate-900 focus:ring-1 focus:ring-blue-500"
@@ -553,14 +715,16 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const delayedIds = items.filter((i) => i.isAuditDelayed).map((i) => i.id);
+                  const delayedIds = items
+                    .filter((i) => i.isAuditDelayed && canUserEditItem(i))
+                    .map((i) => i.id);
                   if (delayedIds.length > 0) {
                     onConfirmAuditWithoutChange(delayedIds);
                     setFilterOnlyAuditDelayed(false);
                   }
                 }}
                 className="px-3 py-1.5 rounded-md text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95 transition-transform"
-                title="현재 전산 수량과 현장 실물이 동일한 지연 품목들의 실사일시를 금일자로 일괄 갱신합니다"
+                title="현재 전산 수량과 현장 실물이 동일한 본인 담당 지연 품목들의 실사일시를 금일자로 일괄 갱신합니다"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>현재 수량 이상없음 · 지연품목 일괄 실사완료</span>
@@ -635,13 +799,33 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
       {/* Main High-Density Compact Table */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
         {/* Table Top Header Strip */}
-        <div className="px-3.5 py-2 bg-slate-900 text-white flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 whitespace-nowrap">
+        <div className="px-3.5 py-2 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 whitespace-nowrap">
             <span className="font-bold">현장 소모품 실사 &amp; 입고확정 시트</span>
             <span className="text-slate-500">·</span>
             <span className="text-slate-300 font-mono text-[11px]">
-              총 <strong>{sortedItems.length}</strong>개 품목 (행 이동 없는 안정된 실사 모드)
+              총 <strong>{sortedItems.length}</strong> / {items.length}개 품목 (행 이동 없는 안정된 실사 모드)
             </span>
+            {selectedReceiver !== '전체' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500 text-white font-bold text-[11px]">
+                <UserCheck className="w-3 h-3" />
+                <span>
+                  수령인 필터:{' '}
+                  {selectedReceiver === '미지정'
+                    ? '담당자 미지정'
+                    : receiverOptions.find((o) => o.value === selectedReceiver)
+                        ?.shortLabel || selectedReceiver}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReceiver('전체')}
+                  className="ml-0.5 hover:text-blue-200 cursor-pointer"
+                  title="수령인 필터 해제"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
             {isWorkerMode && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px]">
                 <HardHat className="w-3 h-3" />
@@ -752,12 +936,18 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                     item.dailyUsage > 0
                       ? Number((draftBaseStock / item.dailyUsage).toFixed(1))
                       : 999;
+                  const canEdit = canUserEditItem(item);
+                  const assignedReceiverLabel = getItemReceiverDisplay(item) || '미지정';
+                  const noPermissionTooltip = `본인 담당 수령 품목이 아닙니다 (담당 수령인: ${assignedReceiverLabel})`;
 
                   return (
                     <tr
                       key={item.id}
+                      title={!canEdit ? noPermissionTooltip : undefined}
                       className={`transition-colors whitespace-nowrap ${
-                        isDraftChanged
+                        !canEdit
+                          ? 'bg-slate-50/80 text-slate-500'
+                          : isDraftChanged
                           ? 'bg-amber-50/50 hover:bg-amber-100/40 border-l-3 border-l-amber-500'
                           : isAwaiting
                           ? 'bg-sky-50/50 hover:bg-sky-100/40 border-l-2 border-l-sky-500'
@@ -789,12 +979,21 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                         </span>
                       </td>
 
-                      {/* 4. 품목명 / 규격 (거래처·환산기준) */}
+                      {/* 4. 품목명 / 규격 (거래처·환산기준): 카테고리와 동일한 폰트 두께(font-medium) 및 스타일 적용 */}
                       <td className="px-3.5 py-3 border-r border-slate-200 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm sm:text-base font-normal text-slate-900 leading-snug">
+                          <span className="text-sm sm:text-base font-medium text-slate-800 leading-snug">
                             {`${item.itemName} ${item.spec}`}
                           </span>
+                          {!canEdit && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-slate-200 text-slate-700 border border-slate-300"
+                              title={noPermissionTooltip}
+                            >
+                              <Lock className="w-3 h-3 text-slate-500" />
+                              타 담당자 품목
+                            </span>
+                          )}
                           {item.isAuditDelayed && (
                             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-xs font-extrabold bg-orange-100 text-orange-800 border border-orange-300">
                               <AlertTriangle className="w-3 h-3 text-orange-600" />
@@ -804,14 +1003,26 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-xs font-normal text-slate-500 mt-0.5 leading-snug flex flex-wrap items-center gap-1.5">
-                          <span className="text-slate-700">{item.vendorName}</span>
+                        <div className="text-xs font-medium text-slate-600 mt-0.5 leading-snug flex flex-wrap items-center gap-1.5">
+                          <span className="text-slate-700 font-medium">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
-                          <span className="font-mono text-slate-500">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
+                          <span className="font-mono font-medium text-slate-600">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
+                          {getItemReceiverDisplay(item) && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span
+                                className={`font-medium ${
+                                  canEdit ? 'text-blue-700' : 'text-slate-600'
+                                }`}
+                              >
+                                수령인: {getItemReceiverDisplay(item)}
+                              </span>
+                            </>
+                          )}
                           {item.deliveryLocation && (
                             <>
                               <span className="text-slate-300">·</span>
-                              <span className="text-slate-600">
+                              <span className="text-slate-700 font-medium">
                                 수령장소: {item.deliveryDetailLocation || item.deliveryLocation}
                               </span>
                             </>
@@ -819,39 +1030,55 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                         </div>
                       </td>
 
-                      {/* 5. 현재 실사재고 입력 (핵심 컬럼: 세로 일직선 정렬 & 방향키 이동 & Draft) */}
+                      {/* 5. 현재 실사재고 입력 (핵심 컬럼: 세로 일직선 정렬 & 방향키 이동 & Draft & 권한 제어) */}
                       <td
+                        title={!canEdit ? noPermissionTooltip : undefined}
                         className={`px-3.5 py-2.5 border-r border-slate-200 text-center transition-colors ${
-                          isDraftChanged ? 'bg-amber-100/60' : 'bg-yellow-50/30'
+                          !canEdit
+                            ? 'bg-slate-100/70'
+                            : isDraftChanged
+                            ? 'bg-amber-100/60'
+                            : 'bg-yellow-50/30'
                         }`}
                       >
                         <div className="inline-flex items-center justify-center gap-1.5">
                           {/* Decrement Button */}
                           <button
                             type="button"
-                            onClick={() => handleStepDraftStock(item, -1)}
-                            className="w-8 h-8 bg-white hover:bg-yellow-100 border border-yellow-300 rounded flex items-center justify-center font-bold text-slate-700 text-sm shadow-2xs active:scale-95 transition-transform cursor-pointer"
-                            title="1 차감"
+                            disabled={!canEdit}
+                            onClick={() => canEdit && handleStepDraftStock(item, -1)}
+                            className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm shadow-2xs transition-transform ${
+                              canEdit
+                                ? 'bg-white hover:bg-yellow-100 border border-yellow-300 text-slate-700 active:scale-95 cursor-pointer'
+                                : 'bg-slate-200 border border-slate-300 text-slate-400 cursor-not-allowed opacity-60'
+                            }`}
+                            title={canEdit ? '1 차감' : noPermissionTooltip}
                           >
                             <Minus className="w-4 h-4" />
                           </button>
 
-                          {/* Yellow Input Box */}
+                          {/* Stock Input Box */}
                           <input
                             type="number"
                             min="0"
                             step="any"
-                            data-audit-idx={idx}
+                            disabled={!canEdit}
+                            readOnly={!canEdit}
+                            data-audit-idx={canEdit ? idx : undefined}
                             value={currentStockVal}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              if (!canEdit) return;
                               handleSetDraftStock(
                                 item.id,
                                 Number(e.target.value) || 0
-                              )
-                            }
-                            onKeyDown={(e) => handleInputKeyDown(e, idx)}
+                              );
+                            }}
+                            onKeyDown={(e) => canEdit && handleInputKeyDown(e, idx)}
+                            title={canEdit ? '실사 재고 수량 입력' : noPermissionTooltip}
                             className={`w-22 px-1.5 py-1.5 text-center font-black font-mono rounded text-base shadow-inner transition-colors ${
-                              isDraftChanged
+                              !canEdit
+                                ? 'bg-slate-200/80 text-slate-500 border border-slate-300 cursor-not-allowed'
+                                : isDraftChanged
                                 ? 'bg-amber-200 text-amber-950 border-2 border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500'
                                 : 'bg-yellow-100 hover:bg-yellow-200 text-slate-950 border border-yellow-400 focus:bg-white focus:ring-2 focus:ring-yellow-500'
                             }`}
@@ -860,9 +1087,14 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                           {/* Increment Button */}
                           <button
                             type="button"
-                            onClick={() => handleStepDraftStock(item, +1)}
-                            className="w-8 h-8 bg-white hover:bg-yellow-100 border border-yellow-300 rounded flex items-center justify-center font-bold text-slate-700 text-sm shadow-2xs active:scale-95 transition-transform cursor-pointer"
-                            title="1 증가"
+                            disabled={!canEdit}
+                            onClick={() => canEdit && handleStepDraftStock(item, +1)}
+                            className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm shadow-2xs transition-transform ${
+                              canEdit
+                                ? 'bg-white hover:bg-yellow-100 border border-yellow-300 text-slate-700 active:scale-95 cursor-pointer'
+                                : 'bg-slate-200 border border-slate-300 text-slate-400 cursor-not-allowed opacity-60'
+                            }`}
+                            title={canEdit ? '1 증가' : noPermissionTooltip}
                           >
                             <Plus className="w-4 h-4" />
                           </button>
@@ -874,7 +1106,15 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                         </div>
 
                         {/* Status feedback indicator underneath the input */}
-                        {isDraftChanged ? (
+                        {!canEdit ? (
+                          <div
+                            className="mt-1 flex items-center justify-center gap-1 text-[11px] text-slate-500 font-medium"
+                            title={noPermissionTooltip}
+                          >
+                            <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>본인 담당 수령 품목이 아닙니다</span>
+                          </div>
+                        ) : isDraftChanged ? (
                           <div className="mt-1 flex items-center justify-center gap-1 text-xs">
                             <span className="px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 font-extrabold shadow-2xs">
                               변경됨
@@ -966,8 +1206,11 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                         )}
                       </td>
 
-                      {/* 9. 입고확정 처리 (독립 액션 컬럼) */}
-                      <td className="px-3.5 py-3 whitespace-nowrap text-left">
+                      {/* 9. 입고확정 처리 (독립 액션 컬럼: 권한 제어 적용) */}
+                      <td
+                        title={!canEdit ? noPermissionTooltip : undefined}
+                        className="px-3.5 py-3 whitespace-nowrap text-left"
+                      >
                         {isAwaiting ? (
                           /* 입고대기 중일 때: 이번 입고량 입력 및 합산 입고확정 버튼 */
                           <div className="flex items-center gap-2">
@@ -980,14 +1223,22 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                                 type="number"
                                 min="0"
                                 step="any"
+                                disabled={!canEdit}
+                                readOnly={!canEdit}
                                 value={incomingQty}
                                 onChange={(e) =>
+                                  canEdit &&
                                   setIncomingQty(
                                     item.id,
                                     Number(e.target.value) || 0
                                   )
                                 }
-                                className="w-16 px-1.5 py-1 text-center text-sm font-bold font-mono text-amber-900 bg-white border border-amber-400 rounded focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                title={canEdit ? '이번 입고 수량 입력' : noPermissionTooltip}
+                                className={`w-16 px-1.5 py-1 text-center text-sm font-bold font-mono rounded shadow-2xs ${
+                                  canEdit
+                                    ? 'text-amber-900 bg-white border border-amber-400 focus:ring-1 focus:ring-amber-500'
+                                    : 'text-slate-400 bg-slate-200 border border-slate-300 cursor-not-allowed'
+                                }`}
                               />
                               <span className="text-xs text-slate-600 font-semibold">
                                 {item.packUnit}
@@ -997,13 +1248,28 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             {/* 합산 입고확정 버튼 (확인 다이얼로그 모달 오픈) */}
                             <button
                               type="button"
-                              onClick={() => handleOpenReceiveModal(item)}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
-                              title="현재 실사재고와 이번 입고량을 확인 후 전산에 확정 반영합니다"
+                              disabled={!canEdit}
+                              onClick={() => canEdit && handleOpenReceiveModal(item)}
+                              className={`px-3 py-1.5 font-bold text-xs rounded shadow-xs transition-all flex items-center gap-1 shrink-0 ${
+                                canEdit
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95 cursor-pointer'
+                                  : 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-75'
+                              }`}
+                              title={
+                                canEdit
+                                  ? '현재 실사재고와 이번 입고량을 확인 후 전산에 확정 반영합니다'
+                                  : noPermissionTooltip
+                              }
                             >
-                              <Check className="w-4 h-4" />
+                              {canEdit ? (
+                                <Check className="w-4 h-4" />
+                              ) : (
+                                <Lock className="w-3.5 h-3.5" />
+                              )}
                               <span>
-                                합산 입고확정 (총 {calculatedFinalStock}{item.packUnit})
+                                {canEdit
+                                  ? `합산 입고확정 (총 ${calculatedFinalStock}${item.packUnit})`
+                                  : '본인 담당 수령 품목 아님'}
                               </span>
                             </button>
                           </div>
@@ -1045,12 +1311,18 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
               const calculatedFinalStock = Number(
                 (currentStockVal + currentIncomingVal).toFixed(2)
               );
+              const canEdit = canUserEditItem(item);
+              const assignedReceiverLabel = getItemReceiverDisplay(item) || '미지정';
+              const noPermissionTooltip = `본인 담당 수령 품목이 아닙니다 (담당 수령인: ${assignedReceiverLabel})`;
 
               return (
                 <div
                   key={item.id}
+                  title={!canEdit ? noPermissionTooltip : undefined}
                   className={`p-4 transition-colors ${
-                    isDraftChanged
+                    !canEdit
+                      ? 'bg-slate-50/90 opacity-85'
+                      : isDraftChanged
                       ? 'bg-amber-50/70 border-l-4 border-amber-500'
                       : isAwaiting
                       ? 'bg-sky-50/40 border-l-4 border-sky-400'
@@ -1068,11 +1340,11 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       <span className={`text-xs ${getLineTextColor(item.line)}`}>
                         [{getLineShortLabel(item.line)}]
                       </span>
-                      <span className="text-xs text-slate-700 font-semibold">
+                      <span className="text-xs text-slate-800 font-medium">
                         {item.categoryName}
                       </span>
                       <span className="text-slate-300">·</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-600 font-medium">
                         {item.vendorName}
                       </span>
                       {item.isAuditDelayed && (
@@ -1112,10 +1384,10 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                   {/* Card Middle: Item Name + Spec */}
                   <div className="py-1">
-                    <div className="text-base font-normal text-slate-900 leading-snug">
+                    <div className="text-base font-medium text-slate-800 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <div className="text-[11px] font-medium text-slate-600 mt-0.5 flex flex-wrap items-center gap-1.5">
                       <span>
                         수령장소: {item.deliveryDetailLocation || item.deliveryLocation || '-'}
                       </span>
@@ -1182,7 +1454,12 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                         <ClipboardCheck className="w-3.5 h-3.5 text-blue-600" />
                         현장 실사재고 입력 ({item.packUnit})
                       </span>
-                      {isDraftChanged ? (
+                      {!canEdit ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded">
+                          <Lock className="w-3 h-3 text-slate-500" />
+                          본인 담당 수령 품목이 아닙니다
+                        </span>
+                      ) : isDraftChanged ? (
                         <span className="text-[11px] font-bold text-amber-900 bg-amber-200 border border-amber-400 px-2 py-0.5 rounded">
                           기존 {item.currentPackStock} → {currentStockVal} {item.packUnit}
                         </span>
@@ -1214,11 +1491,17 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleStepDraftStock(item, -1)}
-                        className="w-12 h-12 bg-white hover:bg-yellow-50 active:bg-yellow-200 border-2 border-yellow-400 rounded-xl flex items-center justify-center font-black text-slate-800 text-xl shadow-xs active:scale-95 transition-transform cursor-pointer shrink-0"
+                        disabled={!canEdit}
+                        onClick={() => canEdit && handleStepDraftStock(item, -1)}
+                        title={canEdit ? '1 감소' : noPermissionTooltip}
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-xs transition-transform shrink-0 ${
+                          canEdit
+                            ? 'bg-white hover:bg-yellow-50 active:bg-yellow-200 border-2 border-yellow-400 text-slate-800 active:scale-95 cursor-pointer'
+                            : 'bg-slate-200 border-2 border-slate-300 text-slate-400 cursor-not-allowed'
+                        }`}
                         aria-label="1 감소"
                       >
-                        <Minus className="w-6 h-6 text-slate-700" />
+                        <Minus className="w-6 h-6" />
                       </button>
 
                       <div className="relative flex-1">
@@ -1226,13 +1509,19 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                           type="number"
                           inputMode="numeric"
                           pattern="[0-9]*"
+                          disabled={!canEdit}
+                          readOnly={!canEdit}
                           value={currentStockVal === 0 ? '' : currentStockVal}
                           placeholder="0"
+                          title={canEdit ? '실사 재고 수량 입력' : noPermissionTooltip}
                           onChange={(e) =>
+                            canEdit &&
                             handleSetDraftStock(item.id, Number(e.target.value) || 0)
                           }
                           className={`w-full h-12 text-center font-black font-mono text-xl rounded-xl shadow-inner border-2 transition-all ${
-                            isDraftChanged
+                            !canEdit
+                              ? 'bg-slate-200 text-slate-500 border-slate-300 cursor-not-allowed'
+                              : isDraftChanged
                               ? 'bg-amber-200 text-amber-950 border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500'
                               : 'bg-yellow-100 text-slate-950 border-yellow-400 focus:bg-white focus:ring-2 focus:ring-yellow-500'
                           }`}
@@ -1244,11 +1533,17 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                       <button
                         type="button"
-                        onClick={() => handleStepDraftStock(item, +1)}
-                        className="w-12 h-12 bg-white hover:bg-yellow-50 active:bg-yellow-200 border-2 border-yellow-400 rounded-xl flex items-center justify-center font-black text-slate-800 text-xl shadow-xs active:scale-95 transition-transform cursor-pointer shrink-0"
+                        disabled={!canEdit}
+                        onClick={() => canEdit && handleStepDraftStock(item, +1)}
+                        title={canEdit ? '1 증가' : noPermissionTooltip}
+                        className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shadow-xs transition-transform shrink-0 ${
+                          canEdit
+                            ? 'bg-white hover:bg-yellow-50 active:bg-yellow-200 border-2 border-yellow-400 text-slate-800 active:scale-95 cursor-pointer'
+                            : 'bg-slate-200 border-2 border-slate-300 text-slate-400 cursor-not-allowed'
+                        }`}
                         aria-label="1 증가"
                       >
-                        <Plus className="w-6 h-6 text-slate-700" />
+                        <Plus className="w-6 h-6" />
                       </button>
                     </div>
 
@@ -1274,11 +1569,19 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                               type="number"
                               inputMode="numeric"
                               min={1}
+                              disabled={!canEdit}
+                              readOnly={!canEdit}
                               value={currentIncomingVal}
                               onChange={(e) =>
+                                canEdit &&
                                 setIncomingQty(item.id, Number(e.target.value) || 1)
                               }
-                              className="w-16 px-2 py-1 text-center font-bold font-mono border-2 border-emerald-400 rounded-md bg-white text-emerald-900 focus:ring-2 focus:ring-emerald-500 text-sm"
+                              title={canEdit ? '이번 입고 수량 입력' : noPermissionTooltip}
+                              className={`w-16 px-2 py-1 text-center font-bold font-mono border-2 rounded-md text-sm ${
+                                canEdit
+                                  ? 'border-emerald-400 bg-white text-emerald-900 focus:ring-2 focus:ring-emerald-500'
+                                  : 'border-slate-300 bg-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
                             />
                             <span className="font-bold text-emerald-900">{item.packUnit}</span>
                           </div>
@@ -1286,12 +1589,24 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => handleOpenReceiveModal(item)}
-                          className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-lg text-xs shadow-sm flex items-center justify-center gap-1.5 active:scale-98 transition-transform cursor-pointer"
+                          disabled={!canEdit}
+                          onClick={() => canEdit && handleOpenReceiveModal(item)}
+                          title={canEdit ? '합산 입고확정' : noPermissionTooltip}
+                          className={`w-full py-2.5 px-3 font-bold rounded-lg text-xs shadow-sm flex items-center justify-center gap-1.5 transition-transform ${
+                            canEdit
+                              ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white active:scale-98 cursor-pointer'
+                              : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          }`}
                         >
-                          <Check className="w-4 h-4" />
+                          {canEdit ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            <Lock className="w-3.5 h-3.5" />
+                          )}
                           <span>
-                            합산 입고확정 (잔여 {currentStockVal} + 입고 {currentIncomingVal} = 최종 {calculatedFinalStock}{item.packUnit})
+                            {canEdit
+                              ? `합산 입고확정 (잔여 ${currentStockVal} + 입고 ${currentIncomingVal} = 최종 ${calculatedFinalStock}${item.packUnit})`
+                              : '본인 담당 수령 품목이 아닙니다'}
                           </span>
                         </button>
                       </div>

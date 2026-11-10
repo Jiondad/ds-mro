@@ -4,6 +4,7 @@ import {
   Category,
   CompanyProfile,
   OrderPolicyType,
+  ProductionLine,
   Unit,
   UserAccount,
   Vendor,
@@ -40,6 +41,7 @@ interface MasterDataTabProps {
   companyProfile?: CompanyProfile;
   onAssignItemReceiver?: (itemId: string, account: UserAccount | null) => void;
   onUpdateItemDeliveryLocation?: (itemId: string, deliveryDetailLocation: string | undefined) => void;
+  onUpdateItemLine?: (itemId: string, newLine: ProductionLine) => void;
   onUpdateCategory: (cat: Category) => void;
   onAddCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
@@ -58,6 +60,12 @@ interface MasterDataTabProps {
 }
 
 const VALID_MASTER_SUB_TABS = ['item', 'category', 'vendor', 'unit', 'company'] as const;
+const LINE_SELECT_OPTIONS: { value: ProductionLine; label: string }[] = [
+  { value: 'SL1', label: 'SL1' },
+  { value: 'SL2', label: 'SL2' },
+  { value: '공용', label: '공용' },
+  { value: '아산공장', label: '아산공장' },
+];
 
 export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   items = [],
@@ -68,6 +76,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   companyProfile,
   onAssignItemReceiver,
   onUpdateItemDeliveryLocation,
+  onUpdateItemLine,
   onUpdateCategory,
   onAddCategory,
   onDeleteCategory,
@@ -477,7 +486,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                     <th className="px-3.5 py-3 border-r border-slate-200 text-center w-14 text-slate-500 font-mono">
                       No.
                     </th>
-                    <th className="px-3.5 py-3 border-r border-slate-200 text-center w-20">
+                    <th className="px-3.5 py-3 border-r border-slate-200 text-center min-w-[115px]">
                       라인
                     </th>
                     <th className="px-3.5 py-3 border-r border-slate-200 w-36">
@@ -525,14 +534,40 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                       const selectedAcc =
                         userAccounts.find((u) => u.username === item.receiverLoginId) ||
                         userAccounts.find((u) => u.name === item.receiverName);
+                      const normalizedLine: ProductionLine =
+                        item.line === '공용(포장장)'
+                          ? '공용'
+                          : item.line === '아산SL'
+                          ? '아산공장'
+                          : item.line;
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50">
                           <td className="px-3.5 py-3 border-r border-slate-200 text-center font-mono text-slate-400">
                             {idx + 1}
                           </td>
-                          <td className="px-3.5 py-3 border-r border-slate-200 text-center font-normal text-slate-800">
-                            {item.line}
+                          <td className="px-2.5 py-3 border-r border-slate-200 text-center font-normal text-slate-800">
+                            {onUpdateItemLine ? (
+                              <select
+                                value={normalizedLine}
+                                onChange={(e) =>
+                                  onUpdateItemLine(
+                                    item.id,
+                                    e.target.value as ProductionLine
+                                  )
+                                }
+                                className="w-full min-w-[96px] border border-slate-300 rounded-md px-2 py-1.5 text-sm font-semibold bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                                title="담당 라인 변경 시 DB에 즉시 반영됩니다."
+                              >
+                                {LINE_SELECT_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span>{normalizedLine}</span>
+                            )}
                           </td>
                           <td className="px-3.5 py-3 border-r border-slate-200 text-slate-800 whitespace-nowrap font-normal">
                             <div className="font-normal text-slate-900">{item.categoryName}</div>

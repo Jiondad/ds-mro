@@ -328,6 +328,16 @@ export function matchLineFilter(itemLine: string, filter: string): boolean {
   return itemLine === filter;
 }
 
+export function getLineSortPriority(line: string): number {
+  const normalized = normalizeLineName(line);
+  if (normalized === 'SL1') return 0;
+  if (normalized === 'SL2') return 1;
+  if (normalized === '공용') return 2;
+  if (normalized === '아산공장') return 3;
+  const idx = LINE_ORDER.indexOf(line);
+  return idx !== -1 ? idx : 999;
+}
+
 export function compareItemsByDefaultOrder<
   T extends {
     line: string;
@@ -338,18 +348,8 @@ export function compareItemsByDefaultOrder<
   }
 >(a: T, b: T, categoryOrderMap?: Map<string, number>): number {
   // 1순위: 라인 지정 순서 (SL1 > SL2 > 공용 > 아산공장)
-  const getLineScore = (line: string) => {
-    const normalized = normalizeLineName(line);
-    if (normalized === 'SL1') return 0;
-    if (normalized === 'SL2') return 1;
-    if (normalized === '공용') return 2;
-    if (normalized === '아산공장') return 3;
-    const idx = LINE_ORDER.indexOf(line);
-    return idx !== -1 ? idx : 999;
-  };
-
-  const scoreA = getLineScore(a.line);
-  const scoreB = getLineScore(b.line);
+  const scoreA = getLineSortPriority(a.line);
+  const scoreB = getLineSortPriority(b.line);
 
   if (scoreA !== scoreB) {
     return scoreA - scoreB;

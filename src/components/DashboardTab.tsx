@@ -985,29 +985,29 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         </span>
                       </td>
 
-                      {/* 3. 품목명(규격 / 거래처·수령장소): 너비 축소 및 자연스러운 줄바꿈·컴팩트 배치 */}
+                      {/* 3. 품목명(규격 / 거래처·수령장소): 카테고리와 동일한 폰트 두께(font-medium) 및 스타일 적용 */}
                       <td className="px-2.5 py-2 border-r border-slate-200 whitespace-normal break-words">
                         <div
-                          className="text-sm sm:text-base font-normal text-slate-900 leading-snug break-keep"
+                          className="text-sm sm:text-base font-medium text-slate-800 leading-snug break-keep"
                           title={`${item.itemName} ${item.spec}`}
                         >
                           {`${item.itemName} ${item.spec}`}
                         </div>
                         <div
-                          className="text-xs font-normal text-slate-500 mt-0.5 leading-tight flex flex-wrap items-center gap-x-1 gap-y-0.5"
+                          className="text-xs font-medium text-slate-600 mt-0.5 leading-tight flex flex-wrap items-center gap-x-1 gap-y-0.5"
                           title={`${item.vendorName} · 주기 ${category?.orderCycleDays || 30}일${
                             item.deliveryLocation ? ` · ${item.deliveryDetailLocation || item.deliveryLocation}` : ''
                           }`}
                         >
-                          <span className="text-slate-700">{item.vendorName}</span>
+                          <span className="text-slate-700 font-medium">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
-                          <span className="text-slate-500">
+                          <span className="text-slate-600 font-medium">
                             {category?.orderCycleDays || 30}일
                           </span>
                           {(item.deliveryDetailLocation || item.deliveryLocation) && (
                             <>
                               <span className="text-slate-300">·</span>
-                              <span className="text-slate-600 truncate max-w-full">
+                              <span className="text-slate-700 font-medium truncate max-w-full">
                                 {item.deliveryDetailLocation || item.deliveryLocation}
                               </span>
                             </>
@@ -1319,11 +1319,11 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       <span className={`text-xs ${getLineTextColor(item.line)}`}>
                         [{getLineShortLabel(item.line)}]
                       </span>
-                      <span className="text-xs text-slate-700 font-semibold">
+                      <span className="text-xs text-slate-800 font-medium">
                         {item.categoryName}
                       </span>
                       <span className="text-slate-300">·</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-600 font-medium">
                         {item.vendorName}
                       </span>
                     </div>
@@ -1375,7 +1375,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
                   {/* Title & Spec */}
                   <div className="py-1">
-                    <div className="text-base font-normal text-slate-900 leading-snug">
+                    <div className="text-base font-medium text-slate-800 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
                   </div>

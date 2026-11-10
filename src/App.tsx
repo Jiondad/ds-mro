@@ -6,6 +6,7 @@ import {
   CompanyProfile,
   InventoryItem,
   OrderHistoryRecord,
+  ProductionLine,
   Unit,
   UsageLog,
   UserAccount,
@@ -873,6 +874,31 @@ export default function App() {
     }
   };
 
+  // [품목 마스터] 품목별 담당 '라인' 드롭다운 변경 핸들러 (셀 변경 시 localStorage + Supabase DB 즉시 UPDATE)
+  const handleUpdateItemLine = (itemId: string, newLine: ProductionLine) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem || targetItem.line === newLine) return;
+
+    const updatedItem: InventoryItem = {
+      ...targetItem,
+      line: newLine,
+    };
+
+    setItems((prev) => {
+      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('items', next);
+      return next;
+    });
+    void upsertInventoryItemToSupabase(updatedItem);
+
+    showToast(
+      `💾 [${targetItem.itemName}] 담당 라인이 '${targetItem.line}' → '${newLine}'(으)로 변경되어 DB에 저장되었습니다.`
+    );
+  };
+
   // RBAC-guarded tab navigation
   const handleTabChangeWithRBAC = (nextTab: ActiveTab) => {
     const level = currentUser?.level ?? 0;
@@ -1195,19 +1221,45 @@ export default function App() {
       })
     );
 
-    // Sync orderHistory status to '입고완료'
+    // Sync orderHistory status to '입고완료' (or create a completed receipt record so monthly inbound stats stay accurate)
     setOrderHistory((prev) => {
       const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
       if (idx !== -1) {
         const updated = [...prev];
+        const packQty = incoming || updated[idx].orderedPackQty;
+        const conv = targetItem.unitConversion || updated[idx].unitConversion || 1;
         updated[idx] = {
           ...updated[idx],
+          orderedPackQty: packQty,
+          unitPrice: targetItem.unitPrice,
+          totalAmount: Math.round(packQty * conv * targetItem.unitPrice),
           status: '입고완료',
           completedDate: TODAY_STR,
         };
         return updated;
       }
-      return prev;
+      const newRecord: OrderHistoryRecord = {
+        id: `hist_rcv_${Date.now()}_${itemId}`,
+        itemId: targetItem.id,
+        orderDate: targetItem.orderDate || TODAY_STR,
+        expectedArrivalDate: targetItem.expectedArrivalDate || TODAY_STR,
+        completedDate: TODAY_STR,
+        vendorName: calc.vendorName,
+        vendorId: targetItem.vendorId,
+        line: targetItem.line,
+        itemName: targetItem.itemName,
+        spec: targetItem.spec,
+        orderedPackQty: incoming,
+        packUnit: targetItem.packUnit,
+        unitConversion: targetItem.unitConversion,
+        baseUnit: targetItem.baseUnit,
+        unitPrice: targetItem.unitPrice,
+        totalAmount: Math.round(incoming * targetItem.unitConversion * targetItem.unitPrice),
+        deliveryLocation: calc.deliveryLocation || '',
+        status: '입고완료',
+        note: '현장 입고확정 자동 기록',
+      };
+      return [newRecord, ...prev];
     });
 
     showToast(
@@ -1680,6 +1732,8 @@ export default function App() {
           <FieldAuditTab
             items={calculatedItems}
             categories={categories}
+            userAccounts={userAccounts}
+            currentUser={currentUser}
             isWorkerMode={isEffectiveWorkerMode}
             onUpdateStock={handleUpdateStock}
             onReceiveStock={handleReceiveStock}
@@ -1731,6 +1785,7 @@ export default function App() {
             userAccounts={userAccounts}
             onAssignItemReceiver={handleAssignItemReceiver}
             onUpdateItemDeliveryLocation={handleUpdateItemDeliveryLocation}
+            onUpdateItemLine={handleUpdateItemLine}
             onShowToast={showToast}
             onSaveAllChanges={() => void handleManualSaveMasterChanges('기준정보 관리')}
           />
