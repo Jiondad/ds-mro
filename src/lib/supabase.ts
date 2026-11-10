@@ -275,3 +275,138 @@ export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | n
   }
 }
 
+/**
+ * Supabase 연동 시 개별 품목(InventoryItem) 즉시 Upsert/Update 동기화
+ */
+export async function upsertInventoryItemToSupabase(
+  item: Record<string, any>
+): Promise<{ ok: boolean; errorMessage?: string }> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: true };
+
+  try {
+    const { error } = await client.from('inventory_items').upsert(
+      {
+        id: item.id,
+        line: item.line,
+        category_id: item.categoryId,
+        vendor_id: item.vendorId,
+        item_name: item.itemName,
+        spec: item.spec,
+        pack_unit: item.packUnit,
+        base_unit: item.baseUnit,
+        unit_conversion: item.unitConversion,
+        current_pack_stock: item.currentPackStock,
+        daily_usage: item.dailyUsage,
+        unit_price: item.unitPrice,
+        moq_description: item.moqDescription || '',
+        lead_time_days: item.leadTimeDays || 3,
+        order_status: item.orderStatus || '발주대기',
+        order_date: item.orderDate || null,
+        expected_arrival_date: item.expectedArrivalDate || null,
+        ordered_pack_qty: item.orderedPackQty ?? null,
+        last_order_date: item.lastOrderDate || null,
+        last_audit_date: item.lastAuditDate || null,
+        last_audited_by: item.lastAuditedBy || null,
+        last_audit_updated_at: item.lastAuditUpdatedAt || null,
+        purpose: item.purpose || '',
+        trigger_pack_qty: item.triggerPackQty ?? null,
+        fixed_order_pack_qty: item.fixedOrderPackQty ?? null,
+        receiver_login_id: item.receiverLoginId || null,
+        receiver_name: item.receiverName || null,
+        receiver_phone: item.receiverPhone || null,
+        delivery_detail_location: item.deliveryDetailLocation || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+
+    if (error) {
+      return { ok: false, errorMessage: error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    return { ok: false, errorMessage: msg };
+  }
+}
+
+/**
+ * Supabase 연동 시 품목 삭제(Delete) 동기화
+ */
+export async function deleteInventoryItemFromSupabase(
+  itemId: string
+): Promise<{ ok: boolean; errorMessage?: string }> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: true };
+
+  try {
+    const { error } = await client
+      .from('inventory_items')
+      .delete()
+      .eq('id', itemId);
+
+    if (error) {
+      return { ok: false, errorMessage: error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    return { ok: false, errorMessage: msg };
+  }
+}
+
+/**
+ * Supabase 연동 시 통합 애플리케이션 상태(Key-Value JSON) 저장
+ * - 테이블 스키마와 무관하게 mro_app_state 테이블이 존재하면 전체 상태를 백업/복원합니다.
+ */
+export async function saveAppStateKeyToSupabase(
+  key: string,
+  payload: unknown
+): Promise<{ ok: boolean }> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: true };
+
+  try {
+    const { error } = await client.from('mro_app_state').upsert(
+      {
+        state_key: key,
+        state_value: payload,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'state_key' }
+    );
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Supabase 연동 시 통합 애플리케이션 상태(Key-Value JSON) 전체 조회
+ */
+export async function fetchAllAppStateFromSupabase(): Promise<Record<string, any> | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const { data, error } = await client
+      .from('mro_app_state')
+      .select('state_key, state_value');
+
+    if (error || !data || data.length === 0) {
+      return null;
+    }
+
+    const result: Record<string, any> = {};
+    data.forEach((row: Record<string, any>) => {
+      if (row.state_key && row.state_value !== undefined) {
+        result[String(row.state_key)] = row.state_value;
+      }
+    });
+    return result;
+  } catch {
+    return null;
+  }
+}
+

@@ -18,6 +18,7 @@ import {
   Package,
   X,
   AlertTriangle,
+  Save,
 } from 'lucide-react';
 
 export interface DeleteAccountOptions {
@@ -35,6 +36,7 @@ interface AccountManagementTabProps {
   onDeleteAccount: (accountId: string, options?: DeleteAccountOptions) => void;
   onToggleAccountActive: (accountId: string) => void;
   onResetUserPassword: (username: string, displayName?: string) => void;
+  onSaveAllChanges?: () => void;
 }
 
 const AFFILIATION_OPTIONS = [
@@ -56,6 +58,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
   onDeleteAccount,
   onToggleAccountActive,
   onResetUserPassword,
+  onSaveAllChanges,
 }) => {
   // New Account Form States
   const [affiliation, setAffiliation] = useState<string>('SL1');
@@ -325,25 +328,38 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5 w-full lg:w-auto shrink-0">
-          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-center">
-            <div className="text-xs text-slate-500">전체 등록 계정</div>
-            <div className="text-base font-extrabold text-slate-900 font-mono mt-0.5">
-              {accounts.length}명
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto shrink-0">
+          <div className="grid grid-cols-3 gap-2.5 flex-1 sm:flex-initial">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2 text-center">
+              <div className="text-xs text-slate-500">전체 등록 계정</div>
+              <div className="text-base font-extrabold text-slate-900 font-mono mt-0.5">
+                {accounts.length}명
+              </div>
+            </div>
+            <div className="bg-blue-50/70 border border-blue-200 rounded-lg px-3.5 py-2 text-center">
+              <div className="text-xs text-blue-700">현장사용자 / 관리자</div>
+              <div className="text-base font-extrabold text-blue-900 font-mono mt-0.5">
+                {totalFieldUsers} / {totalManagers}명
+              </div>
+            </div>
+            <div className="bg-amber-50/80 border border-amber-200 rounded-lg px-3.5 py-2 text-center">
+              <div className="text-xs text-amber-800">초기PW(1234) 대기</div>
+              <div className="text-base font-extrabold text-amber-900 font-mono mt-0.5">
+                {initialPwCount}명
+              </div>
             </div>
           </div>
-          <div className="bg-blue-50/70 border border-blue-200 rounded-lg px-3.5 py-2 text-center">
-            <div className="text-xs text-blue-700">현장사용자 / 관리자</div>
-            <div className="text-base font-extrabold text-blue-900 font-mono mt-0.5">
-              {totalFieldUsers} / {totalManagers}명
-            </div>
-          </div>
-          <div className="bg-amber-50/80 border border-amber-200 rounded-lg px-3.5 py-2 text-center">
-            <div className="text-xs text-amber-800">초기PW(1234) 대기</div>
-            <div className="text-base font-extrabold text-amber-900 font-mono mt-0.5">
-              {initialPwCount}명
-            </div>
-          </div>
+
+          {onSaveAllChanges && (
+            <button
+              type="button"
+              onClick={onSaveAllChanges}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs transition-colors whitespace-nowrap cursor-pointer w-full sm:w-auto"
+            >
+              <Save className="w-4 h-4" />
+              <span>변경사항 저장</span>
+            </button>
+          )}
         </div>
       </div>
 

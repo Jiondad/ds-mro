@@ -54,6 +54,7 @@ interface MasterDataTabProps {
   onResetAllData: () => void;
   onUpdateCompanyProfile?: (profile: CompanyProfile) => void;
   onShowToast?: (message: string) => void;
+  onSaveAllChanges?: () => void;
 }
 
 const VALID_MASTER_SUB_TABS = ['item', 'category', 'vendor', 'unit', 'company'] as const;
@@ -81,6 +82,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   onResetAllData,
   onUpdateCompanyProfile,
   onShowToast,
+  onSaveAllChanges,
 }) => {
   const [activeSubTab, setActiveSubTab] = useUrlPersistedState<'item' | 'category' | 'vendor' | 'unit' | 'company'>(
     'masterSub',
@@ -169,6 +171,27 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
 
   // Inline delivery location draft state per item ID
   const [locationDrafts, setLocationDrafts] = useState<Record<string, string>>({});
+
+  // 상단 [변경사항 저장] 버튼 클릭 시 작성 중인 인라인 입력값(수령장소 등)을 모두 반영 후 DB에 영구 저장
+  const handleCommitAllDraftsAndSave = () => {
+    const draftEntries = Object.entries(locationDrafts) as [string, string][];
+    if (draftEntries.length > 0 && onUpdateItemDeliveryLocation) {
+      draftEntries.forEach(([itemId, draftVal]) => {
+        const trimmed = draftVal.trim();
+        onUpdateItemDeliveryLocation(itemId, trimmed || undefined);
+      });
+      setLocationDrafts({});
+    }
+    if (activeSubTab === 'company' && onUpdateCompanyProfile) {
+      onUpdateCompanyProfile(profileForm);
+      return;
+    }
+    if (onSaveAllChanges) {
+      onSaveAllChanges();
+    } else if (onShowToast) {
+      onShowToast('💾 [저장 완료] 모든 변경사항이 안전하게 반영되었습니다.');
+    }
+  };
 
   // Sort items strictly according to 3-tier fixed order: 라인 > 카테고리 > 품목명
   const sortedMasterItems = useMemo(() => {
@@ -302,22 +325,34 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
           </p>
         </div>
 
-        {/* Master reset button */}
-        <button
-          onClick={() => {
-            if (
-              confirm(
-                '현장 실사 재고와 발주 데이터를 초기 시드 상태로 복원하시겠습니까? (기록된 변경사항이 초기화됩니다)'
-              )
-            ) {
-              onResetAllData();
-            }
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span>초기 데이터 리셋</span>
-        </button>
+        {/* Save all changes & Master reset buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCommitAllDraftsAndSave}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+          >
+            <Save className="w-4 h-4" />
+            <span>변경사항 저장</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                confirm(
+                  '현장 실사 재고와 발주 데이터를 초기 시드 상태로 복원하시겠습니까? (기록된 변경사항이 초기화됩니다)'
+                )
+              ) {
+                onResetAllData();
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>초기 데이터 리셋</span>
+          </button>
+        </div>
       </div>
 
       {/* Sub Tabs */}
@@ -412,6 +447,15 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                   className="w-full text-xs border border-slate-300 rounded-md pl-8 pr-2 py-1.5 bg-white text-slate-900 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
+
+              <button
+                type="button"
+                onClick={handleCommitAllDraftsAndSave}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md shadow-xs whitespace-nowrap cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>변경사항 저장</span>
+              </button>
 
               {onOpenNewItemModal && (
                 <button
@@ -605,8 +649,37 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                                         ? 'border-blue-300 bg-blue-50/40 text-slate-900'
                                         : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-500'
                                     }`}
-                                    title="입력 시 해당 품목/라인의 수령장소를 개별 오버라이드합니다. 비워두면 카테고리/라인 기본값이 자동 적용됩니다."
+                                    title="입력 후 포커스 이동(onBlur) 또는 우측 [저장] 버튼 클릭 시 DB에 즉시 반영됩니다."
                                   />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const draftVal =
+                                        locationDrafts[item.id] !== undefined
+                                          ? locationDrafts[item.id]
+                                          : item.deliveryDetailLocation || '';
+                                      const nextVal = draftVal.trim();
+                                      onUpdateItemDeliveryLocation(
+                                        item.id,
+                                        nextVal || undefined
+                                      );
+                                      setLocationDrafts((prev) => {
+                                        const copy = { ...prev };
+                                        delete copy[item.id];
+                                        return copy;
+                                      });
+                                    }}
+                                    title="수령장소 변경사항 즉시 저장"
+                                    className={`px-2 py-1.5 text-xs rounded border transition-colors cursor-pointer shrink-0 ${
+                                      locationDrafts[item.id] !== undefined &&
+                                      locationDrafts[item.id].trim() !==
+                                        (item.deliveryDetailLocation || '').trim()
+                                        ? 'bg-emerald-600 text-white border-emerald-700 font-bold hover:bg-emerald-700'
+                                        : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-blue-50 hover:text-blue-700'
+                                    }`}
+                                  >
+                                    저장
+                                  </button>
                                   {item.deliveryDetailLocation && (
                                     <button
                                       type="button"

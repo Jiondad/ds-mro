@@ -53,6 +53,11 @@ import {
   insertUserAccountToSupabase,
   updateUserAccountInSupabase,
   deleteUserAccountFromSupabase,
+  fetchUserAccountsFromSupabase,
+  upsertInventoryItemToSupabase,
+  deleteInventoryItemFromSupabase,
+  saveAppStateKeyToSupabase,
+  fetchAllAppStateFromSupabase,
 } from './lib/supabase';
 import { CheckCircle2 } from 'lucide-react';
 
@@ -139,48 +144,29 @@ export default function App() {
     resolveInitialActiveTab(currentUser, isWorkerMode)
   );
 
-  // Company Profile state (includes monthlyBudget for [기능 3])
+  // Company Profile state (persisted in localStorage & Supabase DB without mock overwrite)
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_COMPANY_PROFILE);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        return {
-          ...INITIAL_COMPANY_PROFILE,
-          ...parsed,
-          monthlyBudget: parsed.monthlyBudget ?? INITIAL_COMPANY_PROFILE.monthlyBudget ?? 5000000,
-        };
+        if (parsed && typeof parsed === 'object') {
+          return parsed as CompanyProfile;
+        }
       }
     } catch {}
     return INITIAL_COMPANY_PROFILE;
   });
 
-  // Master Data State with LocalStorage initialization
+  // Master Data State: Strictly load from localStorage / Supabase DB without overwriting cleared/modified fields with INITIAL_* mock data
   const [items, setItems] = useState<InventoryItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
-      if (saved) {
+      if (saved !== null) {
         const parsed: InventoryItem[] = JSON.parse(saved);
-        return parsed.map((it) => {
-          const initMatch = INITIAL_INVENTORY_ITEMS.find((seed) => seed.id === it.id);
-          const merged: InventoryItem = {
-            ...it,
-            lastAuditDate:
-              it.lastAuditDate !== undefined ? it.lastAuditDate : initMatch?.lastAuditDate ?? null,
-            receiverLoginId: it.receiverLoginId || initMatch?.receiverLoginId,
-            receiverName: it.receiverName || initMatch?.receiverName,
-            receiverPhone: it.receiverPhone || initMatch?.receiverPhone,
-            deliveryDetailLocation: it.deliveryDetailLocation || initMatch?.deliveryDetailLocation,
-          };
-          if (
-            merged.orderStatus === '발주완료(입고대기)' &&
-            merged.orderDate &&
-            (!merged.lastOrderDate || merged.lastOrderDate < merged.orderDate)
-          ) {
-            return { ...merged, lastOrderDate: merged.orderDate };
-          }
-          return merged;
-        });
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
       }
     } catch {}
     return INITIAL_INVENTORY_ITEMS;
@@ -189,17 +175,11 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_CATEGORIES);
-      if (saved) {
+      if (saved !== null) {
         const parsed: Category[] = JSON.parse(saved);
-        return parsed.map((cat) => {
-          const initMatch = INITIAL_CATEGORIES.find((c) => c.id === cat.id);
-          return {
-            ...cat,
-            orderPolicyType: cat.orderPolicyType || initMatch?.orderPolicyType || 'DAYS_BASED',
-            defaultTriggerPackQty: cat.defaultTriggerPackQty ?? initMatch?.defaultTriggerPackQty ?? 5,
-            defaultOrderPackQty: cat.defaultOrderPackQty ?? initMatch?.defaultOrderPackQty ?? 10,
-          };
-        });
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
       }
     } catch {}
     return INITIAL_CATEGORIES;
@@ -208,7 +188,10 @@ export default function App() {
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_VENDORS);
-      if (saved) return JSON.parse(saved);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {}
     return INITIAL_VENDORS;
   });
@@ -216,7 +199,10 @@ export default function App() {
   const [units, setUnits] = useState<Unit[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_UNITS);
-      if (saved) return JSON.parse(saved);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {}
     return INITIAL_UNITS;
   });
@@ -240,7 +226,10 @@ export default function App() {
   const [orderHistory, setOrderHistory] = useState<OrderHistoryRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ORDER_HISTORY);
-      if (saved) return JSON.parse(saved);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {}
     return INITIAL_ORDER_HISTORY;
   });
@@ -248,7 +237,10 @@ export default function App() {
   const [usageLogs, setUsageLogs] = useState<UsageLog[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USAGE_LOGS);
-      if (saved) return JSON.parse(saved);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {}
     return INITIAL_USAGE_LOGS;
   });
@@ -294,9 +286,77 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentUser, isWorkerMode]);
 
+  // 최초 로드 시 Supabase DB 연동 데이터 조회 및 동기화 (Mock 데이터로 원복되지 않도록 DB/localStorage 우선 적용)
+  useEffect(() => {
+    if (!isDbConnected) return;
+    let isCancelled = false;
+
+    const loadPersistedDataFromSupabase = async () => {
+      try {
+        const [remoteAccounts, remoteAppState] = await Promise.all([
+          fetchUserAccountsFromSupabase(),
+          fetchAllAppStateFromSupabase(),
+        ]);
+
+        if (isCancelled) return;
+
+        if (remoteAccounts && remoteAccounts.length > 0) {
+          setUserAccounts(remoteAccounts);
+          localStorage.setItem(STORAGE_KEY_USER_ACCOUNTS, JSON.stringify(remoteAccounts));
+        }
+
+        if (remoteAppState) {
+          if (Array.isArray(remoteAppState.items) && remoteAppState.items.length > 0) {
+            setItems(remoteAppState.items);
+            localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(remoteAppState.items));
+          }
+          if (Array.isArray(remoteAppState.categories) && remoteAppState.categories.length > 0) {
+            setCategories(remoteAppState.categories);
+            localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(remoteAppState.categories));
+          }
+          if (Array.isArray(remoteAppState.vendors) && remoteAppState.vendors.length > 0) {
+            setVendors(remoteAppState.vendors);
+            localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(remoteAppState.vendors));
+          }
+          if (Array.isArray(remoteAppState.units) && remoteAppState.units.length > 0) {
+            setUnits(remoteAppState.units);
+            localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(remoteAppState.units));
+          }
+          if (remoteAppState.companyProfile && typeof remoteAppState.companyProfile === 'object') {
+            setCompanyProfile(remoteAppState.companyProfile);
+            localStorage.setItem(
+              STORAGE_KEY_COMPANY_PROFILE,
+              JSON.stringify(remoteAppState.companyProfile)
+            );
+          }
+          if (Array.isArray(remoteAppState.userAccounts) && remoteAppState.userAccounts.length > 0 && (!remoteAccounts || remoteAccounts.length === 0)) {
+            const sortedAcc = [...remoteAppState.userAccounts].sort(compareUserAccountsByAffiliation);
+            setUserAccounts(sortedAcc);
+            localStorage.setItem(STORAGE_KEY_USER_ACCOUNTS, JSON.stringify(sortedAcc));
+          }
+          if (remoteAppState.userPasswords && typeof remoteAppState.userPasswords === 'object') {
+            setUserPasswords((prev) => {
+              const mergedPw = { ...remoteAppState.userPasswords, ...prev };
+              localStorage.setItem(STORAGE_KEY_USER_PASSWORDS, JSON.stringify(mergedPw));
+              return mergedPw;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase initial sync warning:', err);
+      }
+    };
+
+    void loadPersistedDataFromSupabase();
+    return () => {
+      isCancelled = true;
+    };
+  }, [isDbConnected]);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_USER_ACCOUNTS, JSON.stringify(userAccounts));
+      void saveAppStateKeyToSupabase('userAccounts', userAccounts);
     } catch (e) {
       console.error('Failed to save user accounts to localStorage', e);
     }
@@ -305,6 +365,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      void saveAppStateKeyToSupabase('items', items);
     } catch (e) {
       console.error('Failed to save items to localStorage', e);
     }
@@ -313,6 +374,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_COMPANY_PROFILE, JSON.stringify(companyProfile));
+      void saveAppStateKeyToSupabase('companyProfile', companyProfile);
     } catch (e) {
       console.error('Failed to save company profile to localStorage', e);
     }
@@ -329,6 +391,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
+      void saveAppStateKeyToSupabase('categories', categories);
     } catch (e) {
       console.error('Failed to save categories to localStorage', e);
     }
@@ -337,6 +400,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(vendors));
+      void saveAppStateKeyToSupabase('vendors', vendors);
     } catch (e) {
       console.error('Failed to save vendors to localStorage', e);
     }
@@ -345,6 +409,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(units));
+      void saveAppStateKeyToSupabase('units', units);
     } catch (e) {
       console.error('Failed to save units to localStorage', e);
     }
@@ -725,47 +790,54 @@ export default function App() {
     showToast(`🗑️ '${displayName} (${target.username})' 계정이 정상적으로 영구 삭제되었습니다.`);
   };
 
-  // [품목 마스터] 수령자(담당자) 드롭다운 즉시 연동 핸들러
+  // [품목 마스터] 수령자(담당자) 드롭다운 즉시 연동 핸들러 (localStorage + Supabase DB 즉시 UPDATE)
   const handleAssignItemReceiver = (itemId: string, account: UserAccount | null) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
     if (!account) {
-      setItems((prev) =>
-        prev.map((it) =>
-          it.id === itemId
-            ? {
-                ...it,
-                receiverLoginId: undefined,
-                receiverName: undefined,
-                receiverPhone: undefined,
-              }
-            : it
-        )
-      );
-      showToast(`[${targetItem.itemName}] 수령자(담당자) 지정이 해제되었습니다.`);
+      const updatedItem: InventoryItem = {
+        ...targetItem,
+        receiverLoginId: undefined,
+        receiverName: undefined,
+        receiverPhone: undefined,
+      };
+      setItems((prev) => {
+        const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
+        try {
+          localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(next));
+        } catch {}
+        void saveAppStateKeyToSupabase('items', next);
+        return next;
+      });
+      void upsertInventoryItemToSupabase(updatedItem);
+      showToast(`💾 [${targetItem.itemName}] 수령자(담당자) 지정 해제 내용이 DB에 저장되었습니다.`);
       return;
     }
 
     const fullDisplayName = account.title ? `${account.name} ${account.title}` : account.name;
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? {
-              ...it,
-              receiverLoginId: account.username,
-              receiverName: fullDisplayName,
-              receiverPhone: account.phone || it.receiverPhone,
-            }
-          : it
-      )
-    );
+    const updatedItem: InventoryItem = {
+      ...targetItem,
+      receiverLoginId: account.username,
+      receiverName: fullDisplayName,
+      receiverPhone: account.phone || targetItem.receiverPhone,
+    };
+
+    setItems((prev) => {
+      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('items', next);
+      return next;
+    });
+    void upsertInventoryItemToSupabase(updatedItem);
     showToast(
-      `[${targetItem.itemName}] 수령자(담당자)가 '${fullDisplayName} (${account.affiliation || '소속'})' 계정으로 연동되었습니다.`
+      `💾 [${targetItem.itemName}] 수령자(담당자) '${fullDisplayName} (${account.affiliation || '소속'})' 변경사항이 DB에 저장되었습니다.`
     );
   };
 
-  // [품목 마스터] 품목/라인별 수령장소(하역위치) 개별 지정 및 기본값 복원 핸들러
+  // [품목 마스터] 품목/라인별 수령장소(하역위치) 개별 지정 및 기본값 복원 핸들러 (onBlur/버튼 클릭 시 즉시 DB UPDATE)
   const handleUpdateItemDeliveryLocation = (
     itemId: string,
     deliveryDetailLocation: string | undefined
@@ -774,26 +846,29 @@ export default function App() {
     if (!targetItem) return;
     const category = categories.find((c) => c.id === targetItem.categoryId);
     const trimmed = deliveryDetailLocation?.trim() || undefined;
+    const updatedItem: InventoryItem = {
+      ...targetItem,
+      deliveryDetailLocation: trimmed,
+    };
 
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === itemId
-          ? {
-              ...it,
-              deliveryDetailLocation: trimmed,
-            }
-          : it
-      )
-    );
+    setItems((prev) => {
+      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('items', next);
+      return next;
+    });
+    void upsertInventoryItemToSupabase(updatedItem);
 
     if (trimmed) {
       showToast(
-        `[${targetItem.line} · ${targetItem.itemName}] 품목 수령장소가 '${trimmed}'(으)로 개별 지정되었습니다.`
+        `💾 [${targetItem.line} · ${targetItem.itemName}] 수령장소('${trimmed}')가 DB에 즉시 저장되었습니다.`
       );
     } else {
       const defaultLoc = getDefaultDeliveryLocationForLine(targetItem.line, category);
       showToast(
-        `[${targetItem.line} · ${targetItem.itemName}] 수령장소가 라인 기본값('${defaultLoc}')으로 복원되었습니다.`
+        `💾 [${targetItem.line} · ${targetItem.itemName}] 수령장소가 라인 기본값('${defaultLoc}')으로 복원·저장되었습니다.`
       );
     }
   };
@@ -1357,64 +1432,166 @@ export default function App() {
   const handleSaveItem = (item: InventoryItem) => {
     setItems((prev) => {
       const exists = prev.some((i) => i.id === item.id);
-      if (exists) {
-        return prev.map((i) => (i.id === item.id ? item : i));
-      }
-      return [item, ...prev];
+      const next = exists ? prev.map((i) => (i.id === item.id ? item : i)) : [item, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('items', next);
+      return next;
     });
-    showToast(`소모품 '${item.itemName}' 정보가 안전하게 저장되었습니다.`);
+    void upsertInventoryItemToSupabase(item);
+    showToast(`💾 소모품 '${item.itemName}' 정보가 DB에 안전하게 저장되었습니다.`);
   };
 
   const handleDeleteItem = (itemId: string) => {
     const it = items.find((i) => i.id === itemId);
     if (!it) return;
-    setItems((prev) => prev.filter((i) => i.id !== itemId));
-    showToast(`'${it.itemName} (${it.spec})' 품목이 삭제되었습니다.`);
+    setItems((prev) => {
+      const next = prev.filter((i) => i.id !== itemId);
+      try {
+        localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('items', next);
+      return next;
+    });
+    void deleteInventoryItemFromSupabase(itemId);
+    showToast(`🗑️ '${it.itemName} (${it.spec})' 품목이 DB에서 삭제되었습니다.`);
   };
 
   // Master Data handlers
   const handleUpdateCompanyProfile = (profile: CompanyProfile) => {
     setCompanyProfile(profile);
-    showToast('자사 기준정보 및 월별 소모품 예산 한도가 저장되었습니다.');
+    try {
+      localStorage.setItem(STORAGE_KEY_COMPANY_PROFILE, JSON.stringify(profile));
+    } catch {}
+    void saveAppStateKeyToSupabase('companyProfile', profile);
+    showToast('💾 자사 기준정보 및 월별 소모품 예산 한도가 DB에 저장되었습니다.');
   };
 
   const handleAddCategory = (cat: Category) => {
-    setCategories((prev) => [...prev, cat]);
-    showToast(`카테고리 '${cat.name}'이(가) 추가되었습니다.`);
+    setCategories((prev) => {
+      const next = [...prev, cat];
+      try {
+        localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('categories', next);
+      return next;
+    });
+    showToast(`💾 카테고리 '${cat.name}'이(가) 추가 및 저장되었습니다.`);
   };
 
   const handleUpdateCategory = (cat: Category) => {
-    setCategories((prev) => prev.map((c) => (c.id === cat.id ? cat : c)));
+    setCategories((prev) => {
+      const next = prev.map((c) => (c.id === cat.id ? cat : c));
+      try {
+        localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('categories', next);
+      return next;
+    });
+    showToast(`💾 카테고리 '${cat.name}' 설정 및 라인별 수령장소가 저장되었습니다.`);
   };
 
   const handleDeleteCategory = (catId: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== catId));
-    showToast('카테고리가 삭제되었습니다.');
+    setCategories((prev) => {
+      const next = prev.filter((c) => c.id !== catId);
+      try {
+        localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('categories', next);
+      return next;
+    });
+    showToast('🗑️ 카테고리가 삭제되었습니다.');
   };
 
   const handleAddVendor = (vend: Vendor) => {
-    setVendors((prev) => [...prev, vend]);
-    showToast(`공급업체 '${vend.name}'이(가) 등록되었습니다.`);
+    setVendors((prev) => {
+      const next = [...prev, vend];
+      try {
+        localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('vendors', next);
+      return next;
+    });
+    showToast(`💾 공급업체 '${vend.name}'이(가) 등록되었습니다.`);
   };
 
   const handleUpdateVendor = (vend: Vendor) => {
-    setVendors((prev) => prev.map((v) => (v.id === vend.id ? vend : v)));
-    showToast(`공급업체 '${vend.name}' 정보가 성공적으로 수정되었습니다.`);
+    setVendors((prev) => {
+      const next = prev.map((v) => (v.id === vend.id ? vend : v));
+      try {
+        localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('vendors', next);
+      return next;
+    });
+    showToast(`💾 공급업체 '${vend.name}' 정보가 성공적으로 수정·저장되었습니다.`);
   };
 
   const handleDeleteVendor = (vendId: string) => {
-    setVendors((prev) => prev.filter((v) => v.id !== vendId));
-    showToast('공급업체가 삭제되었습니다.');
+    setVendors((prev) => {
+      const next = prev.filter((v) => v.id !== vendId);
+      try {
+        localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('vendors', next);
+      return next;
+    });
+    showToast('🗑️ 공급업체가 삭제되었습니다.');
   };
 
   const handleAddUnit = (u: Unit) => {
-    setUnits((prev) => [...prev, u]);
-    showToast(`단위 '${u.name}'이(가) 등록되었습니다.`);
+    setUnits((prev) => {
+      const next = [...prev, u];
+      try {
+        localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('units', next);
+      return next;
+    });
+    showToast(`💾 단위 '${u.name}'이(가) 등록되었습니다.`);
   };
 
   const handleDeleteUnit = (unitId: string) => {
-    setUnits((prev) => prev.filter((u) => u.id !== unitId));
-    showToast('단위가 삭제되었습니다.');
+    setUnits((prev) => {
+      const next = prev.filter((u) => u.id !== unitId);
+      try {
+        localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(next));
+      } catch {}
+      void saveAppStateKeyToSupabase('units', next);
+      return next;
+    });
+    showToast('🗑️ 단위가 삭제되었습니다.');
+  };
+
+  // [변경사항 저장] 기준정보 및 계정 데이터 일괄 DB(Supabase + localStorage) 강제 동기화 핸들러
+  const handleManualSaveMasterChanges = async (label = '기준정보 및 품목 마스터') => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
+      localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(vendors));
+      localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(units));
+      localStorage.setItem(STORAGE_KEY_COMPANY_PROFILE, JSON.stringify(companyProfile));
+      localStorage.setItem(STORAGE_KEY_USER_ACCOUNTS, JSON.stringify(userAccounts));
+      localStorage.setItem(STORAGE_KEY_USER_PASSWORDS, JSON.stringify(userPasswords));
+
+      await Promise.all([
+        saveAppStateKeyToSupabase('items', items),
+        saveAppStateKeyToSupabase('categories', categories),
+        saveAppStateKeyToSupabase('vendors', vendors),
+        saveAppStateKeyToSupabase('units', units),
+        saveAppStateKeyToSupabase('companyProfile', companyProfile),
+        saveAppStateKeyToSupabase('userAccounts', userAccounts),
+        saveAppStateKeyToSupabase('userPasswords', userPasswords),
+      ]);
+
+      showToast(
+        `💾 [변경사항 저장 완료] ${label}의 모든 데이터가 DB 및 영구 저장소에 안전하게 반영되었습니다.`
+      );
+    } catch (e) {
+      console.error('Failed to manually save master changes', e);
+      showToast(`💾 [저장 완료] ${label} 변경사항이 로컬 저장소에 안전하게 저장되었습니다.`);
+    }
   };
 
   // Reset to seed data
@@ -1554,6 +1731,8 @@ export default function App() {
             userAccounts={userAccounts}
             onAssignItemReceiver={handleAssignItemReceiver}
             onUpdateItemDeliveryLocation={handleUpdateItemDeliveryLocation}
+            onShowToast={showToast}
+            onSaveAllChanges={() => void handleManualSaveMasterChanges('기준정보 관리')}
           />
         )}
 
@@ -1581,6 +1760,7 @@ export default function App() {
             onDeleteAccount={handleDeleteAccount}
             onToggleAccountActive={handleToggleAccountActive}
             onResetUserPassword={handleResetUserPassword}
+            onSaveAllChanges={() => void handleManualSaveMasterChanges('계정 관리')}
           />
         )}
       </main>

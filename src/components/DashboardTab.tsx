@@ -82,6 +82,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   const [selectedStatus, setSelectedStatus] = useUrlPersistedState<
     '전체' | '발주필요' | '임박포함' | '입고대기' | '실사지연'
   >('dashStatus', 'ds_mro_dash_status', '전체');
+  const [auditCardStep, setAuditCardStep] = useUrlPersistedState<
+    'recent' | 'delayed' | 'default'
+  >('dashAuditStep', 'ds_mro_dash_audit_step', 'recent');
   const [searchQuery, setSearchQuery] = useUrlPersistedState<string>(
     'dashQ',
     'ds_mro_dash_q',
@@ -139,6 +142,48 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       })
       .slice(0, 4);
   }, [items, categoryOrderMap]);
+
+  // 실사 지연 및 누락 내역 상위 4건 (미실사/누락 우선 -> 경과일수 내림차순 정렬)
+  const delayedAuditItems = useMemo(() => {
+    return items
+      .filter((it) => it.isAuditDelayed)
+      .slice()
+      .sort((a, b) => {
+        const aMissing = a.daysSinceLastAudit === null ? 1 : 0;
+        const bMissing = b.daysSinceLastAudit === null ? 1 : 0;
+        if (aMissing !== bMissing) {
+          return bMissing - aMissing;
+        }
+        const daysA = a.daysSinceLastAudit ?? 9999;
+        const daysB = b.daysSinceLastAudit ?? 9999;
+        if (daysA !== daysB) {
+          return daysB - daysA;
+        }
+        return compareItemsByDefaultOrder(a, b, categoryOrderMap);
+      })
+      .slice(0, 4);
+  }, [items, categoryOrderMap]);
+
+  // 4번째 카드 3단계 클릭 순환 핸들러:
+  // [1단계: 'recent' (최근 실사 완료 내역)] -> [2단계: 'delayed' (실사 지연 및 누락 내역 + 테이블 필터링)] -> [3단계: 'default' (전체 기본 상태 복귀 + 모든 필터 해제)]
+  const handleCycleAuditCard = () => {
+    if (auditCardStep === 'default') {
+      // [1단계 진입]: 최근 실사 완료 내역 모드 표시 (하단 테이블 실사지연 필터 해제)
+      setAuditCardStep('recent');
+      setSelectedStatus('전체');
+    } else if (auditCardStep === 'recent') {
+      // [2단계 진입]: 실사 지연 및 누락 내역 모드 표시 (하단 테이블 누락/지연 품목만 필터링)
+      setAuditCardStep('delayed');
+      setSelectedStatus('실사지연');
+    } else {
+      // [3단계 진입]: 전체 기본 상태 모드 복귀 (모든 필터를 해제하고 전체 목록 표시)
+      setAuditCardStep('default');
+      setSelectedStatus('전체');
+      setSelectedLine('전체');
+      setSelectedCategory('전체');
+      setSearchQuery('');
+    }
+  };
 
   // Filter items
   const filteredItems = items
@@ -248,27 +293,27 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   return (
     <div className="space-y-4 w-full">
       {/* 1. Top Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 items-stretch">
         {/* Card 1: Total items */}
         <div
           onClick={() => setSelectedStatus('전체')}
-          className={`p-3.5 bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm ${
+          className={`p-3.5 h-[138px] min-h-[138px] bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between ${
             selectedStatus === '전체'
               ? 'border-blue-500 ring-2 ring-blue-100'
               : 'border-slate-200'
           }`}
         >
-          <div className="flex items-center justify-between text-slate-500 mb-1">
+          <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-semibold">전체 관리 소모품</span>
-            <Layers className="w-4 h-4 text-blue-600" />
+            <Layers className="w-4 h-4 text-blue-600 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 my-auto">
             <span className="text-2xl font-black text-slate-900 font-mono">
               {totalItemsCount}
             </span>
             <span className="text-xs text-slate-500">개 품목</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-[11px] text-slate-400 truncate">
             SL1, SL2, 공용, 아산공장 전체
           </p>
         </div>
@@ -284,20 +329,20 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 : '발주필요'
             )
           }
-          className={`p-3.5 bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm ${
+          className={`p-3.5 h-[138px] min-h-[138px] bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between ${
             selectedStatus === '발주필요' || selectedStatus === '임박포함'
               ? 'border-rose-500 ring-2 ring-rose-100 bg-rose-50/30'
               : 'border-rose-200 bg-rose-50/20'
           }`}
         >
-          <div className="flex items-center justify-between text-rose-600 mb-1">
+          <div className="flex items-center justify-between text-rose-600">
             <span className="text-xs font-bold flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
               발주 알림 (필요 / 임박)
             </span>
-            <AlertTriangle className="w-4 h-4 text-rose-600" />
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 my-auto">
             <span className="text-2xl font-black text-rose-600 font-mono">
               {orderNeededCount}
             </span>
@@ -308,7 +353,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             </span>
             <span className="text-xs text-amber-700 font-bold">건 임박</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5 font-medium">
+          <p className="text-[11px] text-slate-500 font-medium truncate">
             클릭 시 '필요만' ↔ '임박포함' 즉시 필터 전환
           </p>
         </div>
@@ -318,122 +363,266 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           onClick={() =>
             setSelectedStatus(selectedStatus === '입고대기' ? '전체' : '입고대기')
           }
-          className={`p-3.5 bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm ${
+          className={`p-3.5 h-[138px] min-h-[138px] bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between ${
             selectedStatus === '입고대기'
               ? 'border-sky-500 ring-2 ring-sky-100 bg-sky-50/30'
               : 'border-slate-200'
           }`}
         >
-          <div className="flex items-center justify-between text-sky-700 mb-1">
+          <div className="flex items-center justify-between text-sky-700">
             <span className="text-xs font-bold">발주완료 (입고대기)</span>
-            <Truck className="w-4 h-4 text-sky-600" />
+            <Truck className="w-4 h-4 text-sky-600 shrink-0" />
           </div>
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 my-auto">
             <span className="text-2xl font-black text-sky-700 font-mono">
               {awaitingArrivalCount}
             </span>
             <span className="text-xs text-slate-500">개 품목 납품 중</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">
+          <p className="text-[11px] text-slate-500 truncate">
             도착 시 현장에서 [입고] 처리
           </p>
         </div>
 
-        {/* Card 4: Recent Field Audit Summary (Up to 4 rows, real-time descending order) */}
+        {/* Card 4: 3-Step Cycle Toggle Card (Fixed height based on 4-row display: 1. 최근 실사 🔄 -> 2. 누락 품목 ⚠️ -> 3. 전체 보기 📋) */}
         <div
-          onClick={() =>
-            setSelectedStatus(selectedStatus === '실사지연' ? '전체' : '실사지연')
-          }
-          title={
-            auditDelayedCount > 0
-              ? `클릭 시 실사 지연/누락(${auditDelayedCount}건) 품목 필터 전환`
-              : '최근 현장 실사 및 입고 갱신 로그 (클릭 시 지연 품목 필터)'
-          }
-          className={`p-3 bg-white rounded-lg border transition-all cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between ${
-            selectedStatus === '실사지연'
-              ? 'border-amber-500 ring-2 ring-amber-100 bg-amber-50/30'
-              : 'border-slate-200'
+          onClick={handleCycleAuditCard}
+          title="클릭할 때마다 [1단계: 최근 실사 🔄] → [2단계: 누락 품목 ⚠️] → [3단계: 전체 보기 📋] 모드로 순환합니다."
+          className={`p-3 h-[138px] min-h-[138px] rounded-lg border transition-all duration-200 cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between select-none overflow-hidden ${
+            auditCardStep === 'delayed'
+              ? 'border-amber-500 ring-2 ring-amber-100 bg-amber-50/40'
+              : auditCardStep === 'recent'
+              ? 'border-emerald-500 ring-2 ring-emerald-100 bg-white'
+              : 'border-slate-200 bg-white hover:border-blue-300'
           }`}
         >
-          {/* Card 4 Header: Title + Status Badges */}
-          <div className="flex items-center justify-between gap-1 mb-1.5">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1 truncate">
-              <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="truncate">최근 실사 내역 요약</span>
+          {/* Card 4 Header: Mode Title + Real-Time 3-Step Cycle Badge */}
+          <div className="flex items-center justify-between gap-1 shrink-0">
+            <span className="text-xs font-bold flex items-center gap-1 truncate">
+              {auditCardStep === 'recent' ? (
+                <>
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="text-emerald-900 truncate">최근 실사 완료 내역</span>
+                </>
+              ) : auditCardStep === 'delayed' ? (
+                <>
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span className="text-amber-950 truncate">실사 지연 및 누락 내역</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="text-slate-700 truncate">재고 실사 현황 (전체)</span>
+                </>
+              )}
             </span>
+
+            {/* Current Step Badge ('최근 실사 🔄' -> '누락 품목 ⚠️' -> '전체 보기 📋') */}
             <div className="flex items-center gap-1 shrink-0">
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[10px] whitespace-nowrap">
-                최근 실사 로그 ({auditedNormalCount}/{totalItemsCount})
-              </span>
-              {auditDelayedCount > 0 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[10px] whitespace-nowrap">
-                  지연 {auditDelayedCount}
+              {auditCardStep === 'recent' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-extrabold text-[10px] whitespace-nowrap shadow-2xs">
+                  최근 실사 🔄
+                </span>
+              ) : auditCardStep === 'delayed' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] whitespace-nowrap shadow-2xs">
+                  누락 품목 ⚠️ ({auditDelayedCount}건)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-300 font-extrabold text-[10px] whitespace-nowrap shadow-2xs">
+                  전체 보기 📋
                 </span>
               )}
             </div>
           </div>
 
-          {/* Card 4 Body: Compact 4-Row Recent Audit List ([실사 일시] | [소속 라인] | [품목명] | [실사자/상태]) */}
-          <div className="space-y-1">
-            {recentAuditItems.length === 0 ? (
-              <div className="text-[11px] text-slate-400 py-3 text-center">
-                최근 기록된 실사 내역이 없습니다.
-              </div>
-            ) : (
-              recentAuditItems.map((it) => {
-                const rawAudit = (it.lastAuditDate || '').trim();
-                const dateTimeMatch = rawAudit.match(
-                  /^(\d{4})-(\d{2}-\d{2})\s+(\d{2}:\d{2})/
-                );
-                const shortTime = dateTimeMatch
-                  ? `${dateTimeMatch[2].replace('-', '.')} ${dateTimeMatch[3]}`
-                  : rawAudit.slice(5, 16) || '-';
-                const isReceive = rawAudit.includes('입고');
-                const statusLabel = isReceive ? '입고확정' : '실사확정';
-                const auditorShort = (
-                  it.lastAuditedBy ||
-                  it.receiverName ||
-                  '현장담당'
-                ).split(' ')[0];
-
-                return (
-                  <div
-                    key={it.id}
-                    className="flex items-center justify-between gap-1 text-[11px] leading-tight py-0.5 border-b border-slate-100 last:border-b-0"
-                  >
-                    <div className="flex items-center gap-1 min-w-0 flex-1">
-                      <span className="font-mono text-slate-500 shrink-0">
-                        {shortTime}
-                      </span>
-                      <span className="text-slate-300 shrink-0">|</span>
-                      <span
-                        className={`${getLineTextColor(it.line)} shrink-0 text-[11px]`}
-                      >
-                        {getLineShortLabel(it.line)}
-                      </span>
-                      <span className="text-slate-300 shrink-0">|</span>
-                      <span
-                        className="text-slate-800 font-normal truncate"
-                        title={`${it.itemName} ${it.spec}`}
-                      >
-                        {it.itemName} {it.spec}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 pl-1">
-                      <span className="text-slate-300">|</span>
-                      <span
-                        className={`font-medium whitespace-nowrap ${
-                          isReceive ? 'text-sky-700' : 'text-emerald-700'
-                        }`}
-                      >
-                        {auditorShort}·{statusLabel}
-                      </span>
-                    </div>
+          {/* Card 4 Body: Fixed-height flex-col justify-between container for 1. Recent Logs / 2. Delayed Items / 3. Overall Default Summary */}
+          {auditCardStep === 'recent' ? (
+            <div className="flex-1 flex flex-col justify-between pt-1.5 min-h-0">
+              {recentAuditItems.length === 0 ? (
+                <>
+                  <div className="text-[11px] text-slate-400 my-auto text-center">
+                    최근 기록된 실사 내역이 없습니다.
                   </div>
-                );
-              })
-            )}
-          </div>
+                  <p className="text-[10px] text-slate-400 truncate text-right">
+                    다음 클릭: 누락 품목 ⚠️
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div
+                    className={`flex flex-col ${
+                      recentAuditItems.length >= 4
+                        ? 'flex-1 justify-between'
+                        : 'space-y-1'
+                    }`}
+                  >
+                    {recentAuditItems.map((it) => {
+                      const rawAudit = (it.lastAuditDate || '').trim();
+                      const dateTimeMatch = rawAudit.match(
+                        /^(\d{4})-(\d{2}-\d{2})\s+(\d{2}:\d{2})/
+                      );
+                      const shortTime = dateTimeMatch
+                        ? `${dateTimeMatch[2].replace('-', '.')} ${dateTimeMatch[3]}`
+                        : rawAudit.slice(5, 16) || '-';
+                      const isReceive = rawAudit.includes('입고');
+                      const statusLabel = isReceive ? '입고확정' : '실사확정';
+                      const auditorShort = (
+                        it.lastAuditedBy ||
+                        it.receiverName ||
+                        '현장담당'
+                      ).split(' ')[0];
+
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center justify-between gap-1 text-[11px] leading-tight py-0.5 border-b border-slate-100 last:border-b-0"
+                        >
+                          <div className="flex items-center gap-1 min-w-0 flex-1">
+                            <span className="font-mono text-slate-500 shrink-0">
+                              {shortTime}
+                            </span>
+                            <span className="text-slate-300 shrink-0">|</span>
+                            <span
+                              className={`${getLineTextColor(it.line)} shrink-0 text-[11px]`}
+                            >
+                              {getLineShortLabel(it.line)}
+                            </span>
+                            <span className="text-slate-300 shrink-0">|</span>
+                            <span
+                              className="text-slate-800 font-normal truncate"
+                              title={`${it.itemName} ${it.spec}`}
+                            >
+                              {it.itemName} {it.spec}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 pl-1">
+                            <span className="text-slate-300">|</span>
+                            <span
+                              className={`font-medium whitespace-nowrap ${
+                                isReceive ? 'text-sky-700' : 'text-emerald-700'
+                              }`}
+                            >
+                              {auditorShort}·{statusLabel}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {recentAuditItems.length < 4 && (
+                    <p className="text-[10px] text-slate-400 truncate text-right">
+                      총 {recentAuditItems.length}건 표시 · 클릭 시 누락 품목 ⚠️
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          ) : auditCardStep === 'delayed' ? (
+            <div className="flex-1 flex flex-col justify-between pt-1.5 min-h-0">
+              {delayedAuditItems.length === 0 ? (
+                <>
+                  <div className="text-[11px] text-emerald-700 font-semibold my-auto text-center">
+                    전 품목 주간실사(7일) 이내 정상 점검 완료
+                  </div>
+                  <p className="text-[10px] text-amber-800/70 truncate text-right">
+                    다음 클릭: 전체 보기 📋
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div
+                    className={`flex flex-col ${
+                      delayedAuditItems.length >= 4
+                        ? 'flex-1 justify-between'
+                        : 'space-y-1'
+                    }`}
+                  >
+                    {delayedAuditItems.map((it) => {
+                      const rawAudit = (it.lastAuditDate || '').trim();
+                      const dateMatch = rawAudit.match(/^(\d{4})-(\d{2}-\d{2})/);
+                      const shortDate = dateMatch
+                        ? dateMatch[2].replace('-', '.')
+                        : '미실사';
+                      const auditorShort = (
+                        it.receiverName ||
+                        it.lastAuditedBy ||
+                        '현장담당'
+                      ).split(' ')[0];
+                      const delayText =
+                        it.daysSinceLastAudit !== null
+                          ? `지연(${it.daysSinceLastAudit}일)`
+                          : '실사누락';
+
+                      return (
+                        <div
+                          key={it.id}
+                          className="flex items-center justify-between gap-1 text-[11px] leading-tight py-0.5 border-b border-amber-200/60 last:border-b-0"
+                        >
+                          <div className="flex items-center gap-1 min-w-0 flex-1">
+                            <span
+                              className={`font-mono shrink-0 ${
+                                it.daysSinceLastAudit === null
+                                  ? 'text-rose-600 font-bold'
+                                  : 'text-amber-900 font-semibold'
+                              }`}
+                            >
+                              {shortDate}
+                            </span>
+                            <span className="text-amber-300 shrink-0">|</span>
+                            <span
+                              className={`${getLineTextColor(it.line)} shrink-0 text-[11px]`}
+                            >
+                              {getLineShortLabel(it.line)}
+                            </span>
+                            <span className="text-amber-300 shrink-0">|</span>
+                            <span
+                              className="text-slate-900 font-normal truncate"
+                              title={`${it.itemName} ${it.spec}`}
+                            >
+                              {it.itemName} {it.spec}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 pl-1">
+                            <span className="text-amber-300">|</span>
+                            <span className="font-bold text-rose-700 whitespace-nowrap">
+                              {auditorShort}·{delayText}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {delayedAuditItems.length < 4 && (
+                    <p className="text-[10px] text-amber-800/80 truncate text-right">
+                      지연·누락 {auditDelayedCount}건 필터 중 · 클릭 시 전체 보기 📋
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col justify-between pt-1.5 min-h-0">
+              <div className="flex items-baseline gap-2 flex-wrap my-auto">
+                <span className="text-2xl font-black text-emerald-700 font-mono leading-none">
+                  {auditedNormalCount}
+                </span>
+                <span className="text-xs text-slate-600 font-semibold">건 정상</span>
+                <span className="text-slate-300">/</span>
+                <span className="text-xl font-black text-amber-600 font-mono leading-none">
+                  {auditDelayedCount}
+                </span>
+                <span className="text-xs text-amber-700 font-bold">건 지연·누락</span>
+              </div>
+              <div className="space-y-0.5">
+                <div className="text-[11px] text-slate-500 font-mono truncate">
+                  최근 동기화: {lastAuditTimestamp || `${TODAY_STR} 주간실사`}
+                </div>
+                <p className="text-[10px] text-slate-400 truncate">
+                  클릭 순환: 최근 실사 🔄 → 누락 품목 ⚠️ → 전체 보기 📋
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
