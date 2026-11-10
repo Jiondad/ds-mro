@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Category, InventoryItem, ProductionLine, Unit, Vendor } from '../types';
+import { Category, InventoryItem, ProductionLine, Unit, UserAccount, Vendor } from '../types';
 import { X, Plus, AlertCircle, Package } from 'lucide-react';
 
 interface NewItemModalProps {
@@ -9,6 +9,7 @@ interface NewItemModalProps {
   categories: Category[];
   vendors: Vendor[];
   units: Unit[];
+  userAccounts?: UserAccount[];
   editingItem?: InventoryItem | null;
 }
 
@@ -27,6 +28,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
   categories,
   vendors,
   units,
+  userAccounts = [],
   editingItem,
 }) => {
   const [line, setLine] = useState<ProductionLine>('SL1');
@@ -488,43 +490,50 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             </div>
           </div>
 
-          {/* Row 7: 현장 수령 담당자 & 세부 하역위치 & 로그인 아이디 연동 */}
+          {/* Row 7: 현장 수령 담당자 ([계정 관리] 드롭다운 연동) & 세부 하역위치 */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
-                현장 사용자 계정 연동 &amp; 수령 담당자 / 납품장소
+                수령자(담당자) 지정 &amp; 납품장소 ([계정 관리] 연동)
               </span>
-              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
-                품목 마스터 등록 계정은 자동으로 &apos;현장 사용자(LV.1)&apos; 권한 · 초기 PW &apos;1234&apos; 부여
+              <span className="text-[11px] text-slate-500">
+                [계정 관리]에 등록된 사용자 목록에서 수령 담당자를 선택합니다.
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1 text-xs">
-                  로그인 아이디 (ID) <span className="text-[10px] font-bold text-blue-600">(현장사용자)</span>
+                  수령자(담당자) 선택
                 </label>
-                <input
-                  type="text"
-                  placeholder="예: field_sl1 (초기PW: 1234)"
+                <select
                   value={receiverLoginId}
-                  onChange={(e) => setReceiverLoginId(e.target.value)}
-                  className="w-full border border-blue-300 rounded-lg p-2 text-xs text-slate-900 bg-white font-mono font-bold focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1 text-xs">
-                  현장 수령 담당자명 / 직급
-                </label>
-                <input
-                  type="text"
-                  placeholder="예: 박현장 반장, 이아산 기장"
-                  value={receiverName}
-                  onChange={(e) => setReceiverName(e.target.value)}
+                  onChange={(e) => {
+                    const selectedUsername = e.target.value;
+                    setReceiverLoginId(selectedUsername);
+                    const matchedUser = userAccounts.find(
+                      (u) => u.username === selectedUsername
+                    );
+                    if (matchedUser) {
+                      setReceiverName(matchedUser.name);
+                      setReceiverPhone(matchedUser.phone || '');
+                    } else if (!selectedUsername) {
+                      setReceiverName('');
+                      setReceiverPhone('');
+                    }
+                  }}
                   className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-500"
-                />
+                >
+                  <option value="">공장 기본담당자 (미지정)</option>
+                  {userAccounts
+                    .filter((u) => u.isActive !== false)
+                    .map((u) => (
+                      <option key={u.id} value={u.username}>
+                        [{u.affiliation || (u.level === 0 ? '총괄' : '현장')}] {u.name} ({u.username})
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div>

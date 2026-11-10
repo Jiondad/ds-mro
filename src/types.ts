@@ -111,7 +111,13 @@ export interface CalculatedItem extends InventoryItem {
   daysSinceLastAudit: number | null; // 최근 실사일로부터 경과 일수 (미실사 시 null)
 }
 
-export type ActiveTab = 'dashboard' | 'field-audit' | 'order-sheet' | 'master-data' | 'stats';
+export type ActiveTab =
+  | 'dashboard'
+  | 'field-audit'
+  | 'order-sheet'
+  | 'master-data'
+  | 'stats'
+  | 'account-management';
 
 export type OrderHistoryStatus = '입고대기' | '입고완료' | '발주취소';
 
@@ -157,19 +163,23 @@ export interface UsageLog {
 }
 
 /**
- * 3단계 사용자 권한 레벨 (RBAC)
- * - 0: LV.0 최고관리자 (전체 5개 탭 접근 및 모든 마스터 설정 변경 권한)
- * - 1: LV.1 현장사용자 ([현장 실사 & 입고] 및 [통합 모니터링 시트(읽기 전용)]만 접근 가능)
- * - 2: LV.2 사무실관리자 ([기준정보 관리]를 제외한 4개 탭 접근 가능)
- */
+  * 3단계 사용자 권한 레벨 (RBAC)
+  * - 0: LV.0 최고관리자 (전체 6개 탭 접근 및 모든 마스터/계정 설정 변경 권한)
+  * - 1: LV.1 현장사용자 ([현장 실사 & 입고] 및 [통합 모니터링 시트(읽기 전용)]만 접근 가능)
+  * - 2: LV.2 사무실관리자 ([기준정보 관리], [계정 관리]를 제외한 4개 탭 접근 가능)
+  */
 export type UserLevel = 0 | 1 | 2;
 
 export interface UserAccount {
   id: string;
-  username: string;
+  username: string; // 로그인 ID
   password?: string;
-  name: string; // 표시 이름 (예: '최고관리자 (System Admin)')
+  name: string; // 사용자 이름 / 수령자명 (예: '박현장 반장')
   level: UserLevel; // 0: 최고관리자 | 1: 현장사용자 | 2: 사무실관리자
+  affiliation?: string; // 소속 (포승공장, SL1, SL2, 공용, 아산공장 등)
+  phone?: string; // 수령자 연락처 (예: '010-8899-7721')
+  isActive?: boolean; // 계정 활성 상태 (기본값: true)
+  createdAt?: string; // 계정 등록일
   title?: string;
   department?: string;
   roleLabel?: string;

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Briefcase,
   Database,
+  Users,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -314,6 +315,20 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <BarChart3 className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
                   <span>사용량 통계</span>
+                </button>
+              )}
+
+              {canAccessMasterData && (
+                <button
+                  onClick={() => onTabChange('account-management')}
+                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 text-xs xl:text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    activeTab === 'account-management'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
+                  <span>계정 관리</span>
                 </button>
               )}
             </nav>

@@ -42,6 +42,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    if (found.isActive === false) {
+      setErrorMsg('비활성화된 계정입니다. 최고관리자(LV.0)에게 문의하세요.');
+      return;
+    }
+
     const customPassword = userPasswords[found.username];
     const isPasswordValid = customPassword
       ? password === customPassword

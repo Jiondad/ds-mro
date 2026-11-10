@@ -19,6 +19,7 @@ import {
   INITIAL_ORDER_HISTORY,
   INITIAL_UNITS,
   INITIAL_USAGE_LOGS,
+  INITIAL_USER_ACCOUNTS,
   INITIAL_VENDORS,
 } from './mockData';
 import { calculateItemMetrics, TODAY_STR } from './utils/calculations';
@@ -28,10 +29,11 @@ import { FieldAuditTab } from './components/FieldAuditTab';
 import { OrderManagementTab } from './components/OrderManagementTab';
 import { MasterDataTab } from './components/MasterDataTab';
 import { UsageStatsTab } from './components/UsageStatsTab';
+import { AccountManagementTab } from './components/AccountManagementTab';
 import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { NewItemModal } from './components/NewItemModal';
 import { EditOrderModal } from './components/EditOrderModal';
-import { LoginModal, SYSTEM_USERS } from './components/LoginModal';
+import { LoginModal } from './components/LoginModal';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { DbConfigModal } from './components/DbConfigModal';
 import { getSavedSupabaseConfig } from './lib/supabase';
@@ -49,6 +51,7 @@ const STORAGE_KEY_USAGE_LOGS = 'daeseong_steel_usage_logs_v1';
 const STORAGE_KEY_WORKER_MODE = 'daeseong_steel_worker_mode_v1';
 const STORAGE_KEY_CURRENT_USER = 'daeseong_steel_current_user_v1';
 const STORAGE_KEY_USER_PASSWORDS = 'daeseong_steel_user_passwords_v1';
+const STORAGE_KEY_USER_ACCOUNTS = 'daeseong_steel_user_accounts_v1';
 
 export default function App() {
   // User authentication & 3-tier RBAC state
@@ -58,6 +61,28 @@ export default function App() {
       if (saved) return JSON.parse(saved);
     } catch {}
     return null;
+  });
+
+  // [계정 관리] 등록 사용자 계정 목록 상태
+  const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_USER_ACCOUNTS);
+      if (saved) {
+        const parsed: UserAccount[] = JSON.parse(saved);
+        const byUsername = new Map<string, UserAccount>();
+        INITIAL_USER_ACCOUNTS.forEach((seed) => byUsername.set(seed.username, seed));
+        parsed.forEach((acc) => {
+          const seedMatch = byUsername.get(acc.username);
+          byUsername.set(acc.username, {
+            ...seedMatch,
+            ...acc,
+            isActive: acc.isActive !== false,
+          });
+        });
+        return Array.from(byUsername.values());
+      }
+    } catch {}
+    return INITIAL_USER_ACCOUNTS;
   });
 
   const [userPasswords, setUserPasswords] = useState<Record<string, string>>(() => {
@@ -240,6 +265,14 @@ export default function App() {
   // Persist to LocalStorage
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_KEY_USER_ACCOUNTS, JSON.stringify(userAccounts));
+    } catch (e) {
+      console.error('Failed to save user accounts to localStorage', e);
+    }
+  }, [userAccounts]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
     } catch (e) {
       console.error('Failed to save items to localStorage', e);
@@ -332,35 +365,13 @@ export default function App() {
     });
   }, [items, categories, vendors]);
 
-  // 품목 마스터(receiverLoginId)에서 등록/생성된 계정을 자동으로 '현장 사용자(LV.1)' 권한으로 연동
-  const registeredUsers: UserAccount[] = useMemo(() => {
-    const map = new Map<string, UserAccount>();
-    SYSTEM_USERS.forEach((u) => map.set(u.username, u));
-
-    items.forEach((it) => {
-      const loginId = it.receiverLoginId?.trim();
-      if (!loginId || map.has(loginId)) return;
-      map.set(loginId, {
-        id: `usr_field_${loginId}`,
-        username: loginId,
-        name: it.receiverName
-          ? `${it.receiverName} (${it.line})`
-          : `현장사용자 (${loginId})`,
-        level: 1, // 품목 마스터 등록 계정은 자동으로 '현장 사용자(LV.1)' 권한 부여
-        roleLabel: 'LV.1 현장사용자',
-      });
-    });
-
-    return Array.from(map.values());
-  }, [items]);
-
   // 현장 사용자(LV.1) 또는 초기화된 계정이 초기 비밀번호('1234') 상태인 경우 로그인 직후 비밀번호 변경 강제
   const mustChangePassword = useMemo(() => {
     if (!currentUser) return false;
     const storedPw = userPasswords[currentUser.username];
     const isPassword1234 = !storedPw || storedPw === '1234';
     if (!isPassword1234) return false;
-    // 현장 사용자(LV.1)이거나 최고관리자에 의해 '1234'로 초기화된 계정인 경우 강제
+    // 현장 사용자(LV.1)이거나 최고관리자에 의해 생성/초기화('1234')된 계정인 경우 강제
     return currentUser.level === 1 || storedPw === '1234';
   }, [currentUser, userPasswords]);
 
@@ -392,9 +403,9 @@ export default function App() {
       setIsWorkerMode(true);
       setActiveTab('field-audit');
     } else if (user.level === 2) {
-      // LV.2 사무실관리자: 기준정보 관리 탭 차단
+      // LV.2 사무실관리자: 기준정보 관리 및 계정 관리 탭 차단
       setIsWorkerMode(false);
-      if (activeTab === 'master-data') {
+      if (activeTab === 'master-data' || activeTab === 'account-management') {
         setActiveTab('dashboard');
       }
     } else {
@@ -403,7 +414,8 @@ export default function App() {
     }
 
     const storedPw = userPasswords[user.username];
-    const isInitialOrReset = (!storedPw || storedPw === '1234') && (user.level === 1 || storedPw === '1234');
+    const isInitialOrReset =
+      (!storedPw || storedPw === '1234') && (user.level === 1 || storedPw === '1234');
 
     const roleText = user.roleLabel || `LV.${user.level}`;
     const displayName = user.title ? `${user.name} ${user.title}` : user.name;
@@ -449,7 +461,7 @@ export default function App() {
     showToast(`'${username}' 계정의 비밀번호가 사내 보안 정책에 따라 변경되었습니다.`);
   };
 
-  // LV.0 최고관리자 전용: 특정 현장 사용자의 비밀번호를 다시 '1234'로 초기화
+  // LV.0 최고관리자 전용: 특정 사용자의 비밀번호를 다시 '1234'로 초기화
   const handleResetUserPassword = (username: string, displayName?: string) => {
     if ((currentUser?.level ?? 0) !== 0) {
       showToast('⚠️ 비밀번호 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
@@ -470,6 +482,167 @@ export default function App() {
     );
   };
 
+  // [계정 관리] 신규 계정 추가 핸들러 (초기 비밀번호 '1234' 자동 부여)
+  const handleAddAccount = (newAccount: UserAccount) => {
+    setUserAccounts((prev) => [...prev, newAccount]);
+    setUserPasswords((prev) => {
+      const updated = { ...prev, [newAccount.username]: '1234' };
+      try {
+        localStorage.setItem(STORAGE_KEY_USER_PASSWORDS, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save initial password for new account', e);
+      }
+      return updated;
+    });
+    const displayName = newAccount.title
+      ? `${newAccount.name} ${newAccount.title}`
+      : newAccount.name;
+    showToast(
+      `✅ [${newAccount.affiliation || '소속'}] '${displayName} (${newAccount.username})' 계정이 생성되었습니다. (초기 PW: 1234)`
+    );
+  };
+
+  // [계정 관리] 계정 정보 수정 핸들러 (연동된 품목 마스터 수령자 정보도 자동 동기화)
+  const handleUpdateAccount = (updatedAccount: UserAccount, previousUsername?: string) => {
+    const oldUsername = previousUsername || updatedAccount.username;
+    const oldAcc = userAccounts.find((a) => a.id === updatedAccount.id);
+
+    setUserAccounts((prev) =>
+      prev.map((acc) => (acc.id === updatedAccount.id ? updatedAccount : acc))
+    );
+
+    if (previousUsername && previousUsername !== updatedAccount.username) {
+      setUserPasswords((prev) => {
+        const updated = { ...prev };
+        if (updated[previousUsername]) {
+          updated[updatedAccount.username] = updated[previousUsername];
+          delete updated[previousUsername];
+        } else {
+          updated[updatedAccount.username] = '1234';
+        }
+        try {
+          localStorage.setItem(STORAGE_KEY_USER_PASSWORDS, JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
+    // 연동된 품목의 수령자 정보 자동 동기화
+    const fullDisplayName = updatedAccount.title
+      ? `${updatedAccount.name} ${updatedAccount.title}`
+      : updatedAccount.name;
+    const oldFullDisplayName = oldAcc
+      ? oldAcc.title
+        ? `${oldAcc.name} ${oldAcc.title}`
+        : oldAcc.name
+      : '';
+
+    setItems((prev) =>
+      prev.map((it) => {
+        const matchesId = it.receiverLoginId === oldUsername;
+        const matchesOldName =
+          oldFullDisplayName && !it.receiverLoginId && it.receiverName === oldFullDisplayName;
+        if (matchesId || matchesOldName) {
+          return {
+            ...it,
+            receiverLoginId: updatedAccount.username,
+            receiverName: fullDisplayName,
+            receiverPhone: updatedAccount.phone || it.receiverPhone,
+          };
+        }
+        return it;
+      })
+    );
+
+    if (currentUser && currentUser.id === updatedAccount.id) {
+      setCurrentUser(updatedAccount);
+      try {
+        localStorage.setItem(STORAGE_KEY_CURRENT_USER, JSON.stringify(updatedAccount));
+      } catch {}
+    }
+
+    showToast(`'${fullDisplayName} (${updatedAccount.username})' 계정 정보가 수정되었습니다.`);
+  };
+
+  // [계정 관리] 계정 활성/비활성 전환 핸들러
+  const handleToggleAccountActive = (accountId: string) => {
+    const target = userAccounts.find((a) => a.id === accountId);
+    if (!target) return;
+    if (target.username === 'admin') {
+      showToast('⚠️ 시스템 기본 최고관리자(admin) 계정은 비활성화할 수 없습니다.');
+      return;
+    }
+    const nextActive = target.isActive === false;
+    setUserAccounts((prev) =>
+      prev.map((acc) => (acc.id === accountId ? { ...acc, isActive: nextActive } : acc))
+    );
+    const displayName = target.title ? `${target.name} ${target.title}` : target.name;
+    showToast(
+      nextActive
+        ? `✅ '${displayName} (${target.username})' 계정이 [활성] 상태로 전환되었습니다.`
+        : `⛔ '${displayName} (${target.username})' 계정이 [비활성] 처리되어 로그인이 제한됩니다.`
+    );
+  };
+
+  // [계정 관리] 계정 삭제 핸들러
+  const handleDeleteAccount = (accountId: string) => {
+    const target = userAccounts.find((a) => a.id === accountId);
+    if (!target) return;
+    if (target.username === 'admin') {
+      showToast('⚠️ 시스템 기본 최고관리자(admin) 계정은 삭제할 수 없습니다.');
+      return;
+    }
+    const displayName = target.title ? `${target.name} ${target.title}` : target.name;
+    if (
+      confirm(
+        `'${displayName} (${target.username})' 계정을 삭제하시겠습니까?\n삭제 시 해당 아이디로 시스템 로그인이 불가합니다.`
+      )
+    ) {
+      setUserAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
+      showToast(`'${displayName} (${target.username})' 계정이 삭제되었습니다.`);
+    }
+  };
+
+  // [품목 마스터] 수령자(담당자) 드롭다운 즉시 연동 핸들러
+  const handleAssignItemReceiver = (itemId: string, account: UserAccount | null) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    if (!account) {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === itemId
+            ? {
+                ...it,
+                receiverLoginId: undefined,
+                receiverName: undefined,
+                receiverPhone: undefined,
+              }
+            : it
+        )
+      );
+      showToast(`[${targetItem.itemName}] 수령자(담당자) 지정이 해제되었습니다.`);
+      return;
+    }
+
+    const fullDisplayName = account.title ? `${account.name} ${account.title}` : account.name;
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              receiverLoginId: account.username,
+              receiverName: fullDisplayName,
+              receiverPhone: account.phone || it.receiverPhone,
+            }
+          : it
+      )
+    );
+    showToast(
+      `[${targetItem.itemName}] 수령자(담당자)가 '${fullDisplayName} (${account.affiliation || '소속'})' 계정으로 연동되었습니다.`
+    );
+  };
+
   // RBAC-guarded tab navigation
   const handleTabChangeWithRBAC = (nextTab: ActiveTab) => {
     const level = currentUser?.level ?? 0;
@@ -480,8 +653,8 @@ export default function App() {
       return;
     }
 
-    if (level === 2 && nextTab === 'master-data') {
-      showToast('⚠️ [권한 제한] 기준정보 관리 메뉴는 LV.0 최고관리자만 접근할 수 있습니다.');
+    if (level !== 0 && (nextTab === 'master-data' || nextTab === 'account-management')) {
+      showToast('⚠️ [권한 제한] 기준정보 관리 및 계정 관리 메뉴는 LV.0 최고관리자만 접근할 수 있습니다.');
       return;
     }
 
@@ -1056,6 +1229,7 @@ export default function App() {
     setOrderHistory(INITIAL_ORDER_HISTORY);
     setUsageLogs(INITIAL_USAGE_LOGS);
     setCompanyProfile(INITIAL_COMPANY_PROFILE);
+    setUserAccounts(INITIAL_USER_ACCOUNTS);
     localStorage.removeItem(STORAGE_KEY_ITEMS);
     localStorage.removeItem(STORAGE_KEY_CATEGORIES);
     localStorage.removeItem(STORAGE_KEY_VENDORS);
@@ -1064,6 +1238,7 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY_ORDER_HISTORY);
     localStorage.removeItem(STORAGE_KEY_USAGE_LOGS);
     localStorage.removeItem(STORAGE_KEY_COMPANY_PROFILE);
+    localStorage.removeItem(STORAGE_KEY_USER_ACCOUNTS);
     showToast('초기 시드 데이터로 전체 초기화가 완료되었습니다.');
   };
 
@@ -1178,6 +1353,8 @@ export default function App() {
               setIsNewItemModalOpen(true);
             }}
             onResetAllData={handleResetAllData}
+            userAccounts={userAccounts}
+            onAssignItemReceiver={handleAssignItemReceiver}
           />
         )}
 
@@ -1191,6 +1368,19 @@ export default function App() {
             onApplyActualDailyUsage={handleApplyActualDailyUsage}
             onBatchApplyActualDailyUsage={handleBatchApplyActualDailyUsage}
             onShowToast={showToast}
+          />
+        )}
+
+        {activeTab === 'account-management' && canAccessMasterData && (
+          <AccountManagementTab
+            accounts={userAccounts}
+            items={calculatedItems}
+            userPasswords={userPasswords}
+            onAddAccount={handleAddAccount}
+            onUpdateAccount={handleUpdateAccount}
+            onDeleteAccount={handleDeleteAccount}
+            onToggleAccountActive={handleToggleAccountActive}
+            onResetUserPassword={handleResetUserPassword}
           />
         )}
       </main>
@@ -1207,6 +1397,7 @@ export default function App() {
         vendors={vendors}
         units={units}
         editingItem={editingItem}
+        userAccounts={userAccounts}
       />
 
       <PurchaseOrderModal
@@ -1249,13 +1440,20 @@ export default function App() {
         onLogin={handleLogin}
         onOpenPasswordChange={() => setIsPasswordChangeOpen(true)}
         userPasswords={userPasswords}
+        registeredUsers={userAccounts}
       />
 
       <PasswordChangeModal
-        isOpen={isPasswordChangeOpen}
-        onClose={() => setIsPasswordChangeOpen(false)}
+        isOpen={isPasswordChangeOpen || mustChangePassword}
+        onClose={() => {
+          if (!mustChangePassword) setIsPasswordChangeOpen(false);
+        }}
         userPasswords={userPasswords}
         onChangePassword={handleChangePassword}
+        registeredUsers={userAccounts}
+        isForced={mustChangePassword}
+        forcedUsername={currentUser?.username}
+        onLogoutInstead={handleLogout}
       />
 
       {currentUser?.level === 0 && (
