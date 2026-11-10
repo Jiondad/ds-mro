@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { CalculatedItem, UserAccount, UserLevel } from '../types';
-import { TODAY_STR } from '../utils/calculations';
+import { TODAY_STR, compareUserAccountsByAffiliation } from '../utils/calculations';
 import { useUrlPersistedState } from '../utils/urlState';
 import {
   Users,
@@ -134,7 +134,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
       }
 
       return true;
-    });
+    }).sort(compareUserAccountsByAffiliation);
   }, [accounts, affiliationFilter, roleFilter, searchQuery]);
 
   const getRoleBadge = (lvl: UserLevel) => {

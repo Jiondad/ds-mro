@@ -22,7 +22,11 @@ import {
   INITIAL_USER_ACCOUNTS,
   INITIAL_VENDORS,
 } from './mockData';
-import { calculateItemMetrics, TODAY_STR } from './utils/calculations';
+import {
+  calculateItemMetrics,
+  TODAY_STR,
+  compareUserAccountsByAffiliation,
+} from './utils/calculations';
 import {
   resolveInitialActiveTab,
   syncActiveTabToUrl,
@@ -93,11 +97,11 @@ export default function App() {
               isActive: acc.isActive !== false,
             });
           });
-          return Array.from(byId.values());
+          return Array.from(byId.values()).sort(compareUserAccountsByAffiliation);
         }
       }
     } catch {}
-    return INITIAL_USER_ACCOUNTS;
+    return [...INITIAL_USER_ACCOUNTS].sort(compareUserAccountsByAffiliation);
   });
 
   const [userPasswords, setUserPasswords] = useState<Record<string, string>>(() => {
@@ -512,7 +516,7 @@ export default function App() {
 
   // [계정 관리] 신규 계정 추가 핸들러 (초기 비밀번호 '1234' 자동 부여)
   const handleAddAccount = (newAccount: UserAccount) => {
-    setUserAccounts((prev) => [...prev, newAccount]);
+    setUserAccounts((prev) => [...prev, newAccount].sort(compareUserAccountsByAffiliation));
     setUserPasswords((prev) => {
       const updated = { ...prev, [newAccount.username]: '1234' };
       try {
@@ -553,12 +557,12 @@ export default function App() {
         return acc;
       });
 
-      // 혹시 이전에 동일 id로 중복 생성된 레코드가 있다면 고유 id 기준으로 단일화
+      // 혹시 이전에 동일 id로 중복 생성된 레코드가 있다면 고유 id 기준으로 단일화 후 공장/라인순 정렬
       const deduped = new Map<string, UserAccount>();
       updatedList.forEach((acc) => {
         deduped.set(acc.id, acc);
       });
-      return Array.from(deduped.values());
+      return Array.from(deduped.values()).sort(compareUserAccountsByAffiliation);
     });
 
     if (previousUsername && previousUsername !== updatedAccount.username) {

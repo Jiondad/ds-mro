@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { UserAccount } from '../types';
+import { compareUserAccountsByAffiliation } from '../utils/calculations';
 
 export const STORAGE_KEY_SUPABASE_CONFIG = 'daeseong_steel_supabase_config_v1';
 
@@ -232,3 +233,45 @@ export async function deleteUserAccountFromSupabase(
     return { ok: false, errorMessage: msg };
   }
 }
+
+/**
+ * Supabase 연동 시 사용자 계정 목록 조회 및 정렬
+ * - SQL ORDER BY(affiliation ASC, department ASC, name ASC) 및
+ *   1순위: 소속 공장(포승공장 -> 아산공장), 2순위: 소속 라인명 가나다순 정렬 적용
+ */
+export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    const { data, error } = await client
+      .from('user_accounts')
+      .select('*')
+      .order('affiliation', { ascending: true })
+      .order('department', { ascending: true })
+      .order('name', { ascending: true });
+
+    if (error || !data) {
+      return null;
+    }
+
+    const mapped: UserAccount[] = data.map((row: Record<string, any>) => ({
+      id: String(row.id),
+      username: String(row.username || ''),
+      name: String(row.name || ''),
+      affiliation: row.affiliation ? String(row.affiliation) : '포승공장',
+      department: row.department ? String(row.department) : '포승공장',
+      phone: row.phone ? String(row.phone) : undefined,
+      level: (row.level === 0 || row.level === 2 ? row.level : 1) as UserAccount['level'],
+      roleLabel: row.role_label ? String(row.role_label) : `LV.${row.level ?? 1}`,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at ? String(row.created_at).substring(0, 10) : undefined,
+    }));
+
+    return mapped.sort(compareUserAccountsByAffiliation);
+  } catch (e) {
+    console.warn('Supabase user_accounts fetch warning:', e);
+    return null;
+  }
+}
+
