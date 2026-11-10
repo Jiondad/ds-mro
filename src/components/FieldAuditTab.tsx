@@ -24,6 +24,7 @@ import {
   HardHat,
   UserCheck,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface FieldAuditTabProps {
@@ -674,43 +675,119 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
         </div>
       </div>
 
-      {/* Audit Delay Alert & Bulk Confirm Banner ([기능 1]) */}
-      {(totalAuditDelayedCount > 0 || filterOnlyAuditDelayed) && (
-        <div
-          className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all shadow-xs ${
-            filterOnlyAuditDelayed
-              ? 'bg-orange-100/90 border-orange-400 text-orange-950'
-              : 'bg-orange-50/80 border-orange-200 text-orange-900'
-          }`}
-        >
-          <div className="flex items-start sm:items-center gap-2 text-xs">
-            <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5 sm:mt-0" />
-            <div>
-              <span className="font-extrabold">
-                [⚠️ 실사 지연 품목 {totalAuditDelayedCount}건 감지]
-              </span>{' '}
-              <span className="text-orange-800 font-medium">
-                주간실사 주기(7일) 경과 또는 실사 이력이 누락된 품목이 있습니다.{' '}
-                {filterOnlyAuditDelayed
-                  ? '현재 지연 품목만 필터링하여 표시 중입니다.'
-                  : '우측 버튼으로 지연 품목만 모아 빠르게 실사를 완료하세요.'}
-              </span>
+      {/* 통합 상단 실사 공지 & 데이터 저장 통합 센터 (Single Unified Status & Notice Banner)
+          [실사 지연 공지] + [주간실사 운영 안내] + [데이터 자동 저장/커밋 제어] 통합 */}
+      <div
+        className={`rounded-lg border shadow-2xs transition-all overflow-hidden ${
+          totalAuditDelayedCount > 0 && filterOnlyAuditDelayed
+            ? 'bg-orange-50/90 border-orange-300 ring-1 ring-orange-200'
+            : totalAuditDelayedCount > 0
+            ? 'bg-amber-50/60 border-amber-300'
+            : changedCount > 0
+            ? 'bg-amber-50/70 border-amber-300 ring-1 ring-amber-200'
+            : 'bg-white border-slate-200'
+        }`}
+      >
+        <div className="p-2.5 sm:p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          {/* Left: 공지 & 상태 구역 (중요도별 시각적 구역 분할) */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            {/* 상태 뱃지 그룹 */}
+            <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+              {/* 1. 실사 지연 상태 뱃지 (경고성 알림: 주황/빨간 포인트) */}
+              {totalAuditDelayedCount > 0 ? (
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-black shadow-2xs ${
+                    filterOnlyAuditDelayed
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-orange-600 text-white animate-pulse'
+                  }`}
+                  title="최근 실사일시가 7일 이상 경과했거나 실사 이력이 누락된 품목입니다"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>실사 지연 {totalAuditDelayedCount}건</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>주간실사 100% 정상</span>
+                </span>
+              )}
+
+              {/* 2. 데이터 자동/전산 저장 상태 뱃지 */}
+              {changedCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-black bg-amber-500 text-slate-950 shadow-2xs">
+                  <span className="flex h-2 w-2 relative shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-200 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-950"></span>
+                  </span>
+                  <span>{changedCount}건 수정 중 (미반영)</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>전산 안전 저장됨</span>
+                </span>
+              )}
+            </div>
+
+            {/* 세로 구분선 (태블릿/데스크톱) */}
+            <div className="hidden sm:block h-6 w-px bg-slate-200 shrink-0" />
+
+            {/* 통합 안내 메시지 & 주간실사 안내 팁 */}
+            <div className="text-xs text-slate-700 min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap leading-tight">
+                {totalAuditDelayedCount > 0 ? (
+                  <span className="font-bold text-orange-900">
+                    주간실사 주기(7일) 경과 품목이 감지되었습니다.
+                  </span>
+                ) : (
+                  <span className="font-semibold text-slate-800">
+                    모든 현장 실사 재고가 정상 동기화되어 있습니다.
+                  </span>
+                )}
+                <span className="text-[11px] text-slate-500 hidden xl:inline">
+                  · 주간실사 주기: 7일 이내 정기 점검 관리
+                </span>
+                <span className="text-[11px] text-blue-700 font-medium hidden md:inline">
+                  · ⌨️ 방향키(↓/↑) &amp; Enter 빠른 연속 입력 지원
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                {changedCount > 0
+                  ? '수정된 실사 수량은 임시 보관 중이며, [실사 변경사항 저장]을 눌러야 전산 DB에 최종 확정됩니다.'
+                  : totalAuditDelayedCount > 0
+                  ? filterOnlyAuditDelayed
+                    ? '현재 지연 품목만 필터링하여 표시 중입니다. 실사 수량을 입력하거나 일괄 완료할 수 있습니다.'
+                    : '우측 [지연 품목 필터링] 또는 [일괄 실사완료] 버튼으로 빠르게 점검을 마무리하세요.'
+                  : '실사 수량 변경 즉시 계산되며, 우측 버튼으로 전산에 안전하게 저장됩니다.'}
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setFilterOnlyAuditDelayed(!filterOnlyAuditDelayed)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${
-                filterOnlyAuditDelayed
-                  ? 'bg-white text-orange-900 border border-orange-300 hover:bg-orange-50'
-                  : 'bg-orange-600 text-white hover:bg-orange-700 shadow-2xs'
-              }`}
-            >
-              {filterOnlyAuditDelayed ? '전체 품목 다시 보기' : `지연 품목 ${totalAuditDelayedCount}건만 필터링`}
-            </button>
+          {/* Right: 통합 액션 버튼 제어부 (지연 필터/일괄완료 + 저장/취소) */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-200/80 justify-end">
+            {/* 실사 지연 필터링 토글 버튼 */}
+            {totalAuditDelayedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterOnlyAuditDelayed(!filterOnlyAuditDelayed);
+                  if (!filterOnlyAuditDelayed) {
+                    setFilterOnlyAwaiting(false);
+                  }
+                }}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
+                  filterOnlyAuditDelayed
+                    ? 'bg-white text-orange-950 border border-orange-400 hover:bg-orange-50 font-black'
+                    : 'bg-orange-600 hover:bg-orange-700 text-white'
+                }`}
+                title="지연 품목만 모아보거나 전체 목록으로 복귀"
+              >
+                {filterOnlyAuditDelayed ? '전체 품목 보기' : `지연 ${totalAuditDelayedCount}건만 필터`}
+              </button>
+            )}
 
+            {/* 지연 품목 일괄 실사완료 버튼 */}
             {totalAuditDelayedCount > 0 && onConfirmAuditWithoutChange && (
               <button
                 type="button"
@@ -723,76 +800,51 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                     setFilterOnlyAuditDelayed(false);
                   }
                 }}
-                className="px-3 py-1.5 rounded-md text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95 transition-transform"
+                className="px-2.5 py-1.5 rounded-md text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95 transition-transform whitespace-nowrap"
                 title="현재 전산 수량과 현장 실물이 동일한 본인 담당 지연 품목들의 실사일시를 금일자로 일괄 갱신합니다"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>현재 수량 이상없음 · 지연품목 일괄 실사완료</span>
+                <span>지연품목 일괄 실사완료</span>
               </button>
             )}
-          </div>
-        </div>
-      )}
 
-      {/* Draft & Commit Control Bar (Explicit Save / Cancel Mechanism) */}
-      <div
-        className={`p-2.5 rounded-lg border flex flex-wrap items-center justify-between gap-2.5 transition-all shadow-xs ${
-          changedCount > 0
-            ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-300'
-            : 'bg-white border-slate-200'
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {changedCount > 0 ? (
-            <>
-              <span className="flex h-2.5 w-2.5 relative shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-              </span>
-              <span className="text-xs font-bold text-amber-950">
-                현장 실사 재고 <strong className="text-amber-900 font-black underline text-sm">{changedCount}건</strong> 수정 중 (전산 미반영)
-              </span>
-              <span className="text-[11px] text-amber-700 hidden md:inline font-medium">
-                · 우측 [실사 변경사항 저장] 버튼을 눌러야 전산에 확정 반영됩니다.
-              </span>
-            </>
-          ) : (
-            <>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="text-xs font-semibold text-slate-700">
-                모든 현장 실사 재고가 전산에 안전하게 저장되어 있습니다.
-              </span>
-              <span className="text-[11px] text-slate-400 hidden md:inline">
-                · 숫자를 수정한 후 [실사 변경사항 저장]을 누르면 일괄 전산 등록됩니다.
-              </span>
-            </>
-          )}
-        </div>
+            {/* 변경 취소 버튼 (수정 사항 있을 때만 노출) */}
+            {changedCount > 0 && (
+              <button
+                type="button"
+                onClick={handleResetDrafts}
+                className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-300 rounded-md transition-colors flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer whitespace-nowrap"
+                title="임시 수정한 실사 수량을 전산 기존값으로 되돌립니다"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>변경 취소</span>
+              </button>
+            )}
 
-        <div className="flex items-center gap-2">
-          {changedCount > 0 && (
+            {/* 실사 변경사항 저장 버튼 */}
             <button
               type="button"
-              onClick={handleResetDrafts}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-300 rounded-md transition-colors flex items-center gap-1 shadow-2xs active:scale-95"
+              onClick={handleCommitBatch}
+              disabled={changedCount === 0}
+              className={`px-3.5 py-1.5 text-xs font-black rounded-md flex items-center gap-1.5 transition-all shadow-xs whitespace-nowrap ${
+                changedCount > 0
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-300 active:scale-95 cursor-pointer'
+                  : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+              }`}
+              title={
+                changedCount > 0
+                  ? `임시 수정된 ${changedCount}건의 실사 수량을 전산 DB에 최종 확정 저장합니다`
+                  : '현재 수정된 항목이 없습니다'
+              }
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>변경 취소(초기화)</span>
+              <ClipboardCheck className="w-4 h-4" />
+              <span>
+                {changedCount > 0
+                  ? `실사 변경사항 저장 (${changedCount}건)`
+                  : '전산 저장 완료'}
+              </span>
             </button>
-          )}
-          <button
-            type="button"
-            onClick={handleCommitBatch}
-            disabled={changedCount === 0}
-            className={`px-4 py-1.5 text-xs font-black rounded-md flex items-center gap-1.5 transition-all shadow-xs ${
-              changedCount > 0
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-300 active:scale-95 cursor-pointer'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            <span>실사 변경사항 저장 ({changedCount}건)</span>
-          </button>
+          </div>
         </div>
       </div>
 

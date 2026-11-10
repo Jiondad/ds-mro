@@ -937,14 +937,20 @@ export const INITIAL_ORDER_HISTORY: OrderHistoryRecord[] = [
   },
 ];
 
-// Realistic 6-month usage logs (2026-06 ~ 2026-11)
+// Realistic 12-month usage logs (2026-01 ~ 2026-12)
 const USAGE_MONTHS = [
+  { month: '2026-01', date: '2026-01-31', days: 31, monthFactor: 0.95 },
+  { month: '2026-02', date: '2026-02-28', days: 28, monthFactor: 0.88 }, // 설 연휴 조업일 축소
+  { month: '2026-03', date: '2026-03-31', days: 31, monthFactor: 1.02 },
+  { month: '2026-04', date: '2026-04-30', days: 30, monthFactor: 1.00 },
+  { month: '2026-05', date: '2026-05-31', days: 31, monthFactor: 1.05 },
   { month: '2026-06', date: '2026-06-30', days: 30, monthFactor: 0.95 },
   { month: '2026-07', date: '2026-07-31', days: 31, monthFactor: 0.98 },
   { month: '2026-08', date: '2026-08-31', days: 31, monthFactor: 0.90 }, // 하계 휴가철 조업일 단축
   { month: '2026-09', date: '2026-09-30', days: 30, monthFactor: 1.05 },
   { month: '2026-10', date: '2026-10-31', days: 31, monthFactor: 1.15 }, // 성수기 가동률 상승
   { month: '2026-11', date: '2026-11-07', days: 7, monthFactor: 1.12 },  // 당월 (11월 1일 ~ 7일 7일간 실사 누적)
+  { month: '2026-12', date: '2026-12-31', days: 31, monthFactor: 1.08 }, // 연말 조업 안정세
 ];
 
 const ITEM_USAGE_FACTORS: Record<string, number> = {
