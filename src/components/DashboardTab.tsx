@@ -241,7 +241,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             <span className="text-xs text-slate-500">개 품목</span>
           </div>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            SL1, SL2, 아산, 공용 포장장 전체
+            SL1, SL2, 공용, 아산공장 전체
           </p>
         </div>
 
@@ -560,13 +560,29 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
         {/* High-Density Spreadsheet Table (Desktop: lg+) */}
         <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-xs sm:text-sm text-left border-collapse table-auto">
+          <table className="w-full text-xs sm:text-sm text-left border-collapse table-fixed">
+            <colgroup>
+              <col className="w-[4.5%]" />
+              <col className="w-[7.5%]" />
+              <col className="w-[17.5%]" />
+              <col className="w-[7%]" />
+              <col className="w-[6.5%]" />
+              <col className="w-[6%]" />
+              <col className="w-[5.5%]" />
+              <col className="w-[7%]" />
+              <col className="w-[7%]" />
+              <col className="w-[6.5%]" />
+              <col className="w-[5.5%]" />
+              <col className="w-[10.5%]" />
+              <col className="w-[5%]" />
+              <col className="w-[4%]" />
+            </colgroup>
             <thead>
               <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 select-none text-xs tracking-tight">
                 {/* 1. 라인 */}
                 <th
                   onClick={() => handleSortToggle('line')}
-                  className="px-1.5 py-2 border-r border-slate-200 text-center cursor-pointer hover:bg-slate-200 whitespace-nowrap w-12"
+                  className="px-2 py-2.5 border-r border-slate-200 text-center cursor-pointer hover:bg-slate-200 whitespace-nowrap"
                 >
                   <div className="flex items-center justify-center gap-0.5">
                     <span>라인</span>
@@ -575,40 +591,40 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </th>
 
                 {/* 2. 카테고리 */}
-                <th className="px-2 py-2 border-r border-slate-200 text-left whitespace-nowrap w-24">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-left whitespace-nowrap">
                   카테고리
                 </th>
 
-                {/* 3. 품목명 (규격 / 거래처) */}
+                {/* 3. 품목명 (규격 / 거래처·수령장소) */}
                 <th
                   onClick={() => handleSortToggle('itemName')}
-                  className="px-2.5 py-2 border-r border-slate-200 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
+                  className="px-2.5 py-2.5 border-r border-slate-200 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
                 >
-                  <div className="flex items-center gap-1">
-                    <span>품목명 (규격 / 거래처·수령장소)</span>
+                  <div className="flex items-center gap-1 truncate">
+                    <span className="truncate">품목명 (규격 / 거래처·수령장소)</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400 shrink-0" />
                   </div>
                 </th>
 
                 {/* 4. 실사재고(포장) */}
-                <th className="px-2 py-2 border-r border-slate-200 text-right bg-yellow-50 text-yellow-900 whitespace-nowrap w-22">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-right bg-yellow-50 text-yellow-900 whitespace-nowrap">
                   실사재고
                 </th>
 
                 {/* 5. 환산재고 */}
-                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-20">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                   환산재고
                 </th>
 
                 {/* 6. 일사용량 */}
-                <th className="px-1.5 py-2 border-r border-slate-200 text-right whitespace-nowrap w-16">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                   일사용량
                 </th>
 
                 {/* 7. 잔여일 */}
                 <th
                   onClick={() => handleSortToggle('remainingDays')}
-                  className="px-1.5 py-2 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-200 whitespace-nowrap w-16"
+                  className="px-2 py-2.5 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-200 whitespace-nowrap"
                 >
                   <div className="flex items-center justify-end gap-0.5">
                     <span>잔여일</span>
@@ -617,37 +633,37 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </th>
 
                 {/* 8. 안전/기준재고 */}
-                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-22">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                   안전/기준
                 </th>
 
-                {/* 9. 발주(포장·단위) - 입고단위와 발주(포장) 통합 압축 */}
-                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-22">
+                {/* 9. 발주(포장·단위) */}
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                   발주(포장·단위)
                 </th>
 
                 {/* 10. 발주(환산) */}
-                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-20">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                   발주(환산)
                 </th>
 
-                {/* 11. 발주·상태 (발주 신호등 + 진행상태 통합) */}
-                <th className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap w-18">
+                {/* 11. 발주·상태 */}
+                <th className="px-2 py-2.5 border-r border-slate-200 text-center whitespace-nowrap">
                   발주·상태
                 </th>
 
                 {/* 12. 발주/입고예정 */}
-                <th className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap w-40">
+                <th className="px-2.5 py-2.5 border-r border-slate-200 text-center whitespace-nowrap">
                   발주/입고예정
                 </th>
 
                 {/* 13. 최근발주 */}
-                <th className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap w-16">
+                <th className="px-2 py-2.5 border-r border-slate-200 text-center whitespace-nowrap">
                   최근발주
                 </th>
 
                 {/* 14. 관리 */}
-                <th className="px-1.5 py-2 text-center whitespace-nowrap w-14">
+                <th className="px-1.5 py-2.5 text-center whitespace-nowrap">
                   관리
                 </th>
               </tr>
@@ -679,44 +695,46 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       }`}
                     >
                       {/* 1. 라인 */}
-                      <td className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-2 py-2.5 border-r border-slate-200 text-center whitespace-nowrap">
                         <span className={`${getLineTextColor(item.line)} text-xs sm:text-sm`}>
                           {getLineShortLabel(item.line)}
                         </span>
                       </td>
 
                       {/* 2. 카테고리 */}
-                      <td className="px-2 py-2 border-r border-slate-200 whitespace-nowrap">
-                        <span className="font-medium text-slate-800 text-xs block truncate max-w-[96px]" title={item.categoryName}>
+                      <td className="px-2.5 py-2.5 border-r border-slate-200">
+                        <span
+                          className="font-medium text-slate-800 text-xs sm:text-sm block truncate"
+                          title={item.categoryName}
+                        >
                           {item.categoryName}
                         </span>
                       </td>
 
-                      {/* 3. 품목명(규격 / 거래처·수령장소): 일반 두께(font-normal) 및 서브 텍스트 밀착 */}
-                      <td className="px-2.5 py-2 border-r border-slate-200 max-w-[230px]">
+                      {/* 3. 품목명(규격 / 거래처·수령장소): 너비 축소 및 자연스러운 줄바꿈·컴팩트 배치 */}
+                      <td className="px-2.5 py-2 border-r border-slate-200 whitespace-normal break-words">
                         <div
-                          className="text-sm font-normal text-slate-900 leading-tight truncate"
+                          className="text-sm sm:text-base font-normal text-slate-900 leading-snug break-keep"
                           title={`${item.itemName} ${item.spec}`}
                         >
-                          <span>{item.itemName}</span>{' '}
-                          <span className="text-xs text-slate-600 font-mono">{item.spec}</span>
+                          {`${item.itemName} ${item.spec}`}
                         </div>
                         <div
-                          className="text-[11px] text-slate-500 mt-0.5 leading-tight flex items-center gap-1 truncate"
+                          className="text-xs font-normal text-slate-500 mt-0.5 leading-tight flex flex-wrap items-center gap-x-1 gap-y-0.5"
                           title={`${item.vendorName} · 주기 ${category?.orderCycleDays || 30}일${
-                            item.deliveryLocation ? ` · ${item.deliveryLocation}` : ''
+                            item.deliveryLocation ? ` · ${item.deliveryDetailLocation || item.deliveryLocation}` : ''
                           }`}
                         >
-                          <span className="text-slate-700 shrink-0">{item.vendorName}</span>
+                          <span className="text-slate-700">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
-                          <span className="text-slate-500 shrink-0">
+                          <span className="text-slate-500">
                             {category?.orderCycleDays || 30}일
                           </span>
-                          {item.deliveryLocation && (
+                          {(item.deliveryDetailLocation || item.deliveryLocation) && (
                             <>
                               <span className="text-slate-300">·</span>
-                              <span className="text-slate-500 truncate">
-                                {item.deliveryLocation}
+                              <span className="text-slate-600 truncate max-w-full">
+                                {item.deliveryDetailLocation || item.deliveryLocation}
                               </span>
                             </>
                           )}
@@ -724,7 +742,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       </td>
 
                       {/* 4. 실사재고(포장) */}
-                      <td className="px-2 py-2 border-r border-slate-200 bg-amber-50/60 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2.5 border-r border-slate-200 bg-amber-50/60 text-right whitespace-nowrap">
                         <div className="inline-flex items-baseline justify-end gap-0.5 leading-tight">
                           <span className="font-extrabold font-mono text-sm text-slate-900">
                             {formatNumber(item.currentPackStock)}
@@ -747,7 +765,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                             </span>
                           </div>
                         ) : item.lastAuditDate ? (
-                          <div className="text-[10px] text-slate-500 font-mono leading-tight mt-0.5">
+                          <div className="text-[10px] text-slate-500 font-mono leading-tight mt-0.5 truncate">
                             {item.lastAuditDate
                               .replace(TODAY_STR + ' ', '')
                               .replace(' 실사확정', '')
@@ -757,7 +775,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       </td>
 
                       {/* 5. 환산재고 */}
-                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                         <span className="font-extrabold text-blue-700 font-mono text-sm">
                           {formatNumber(item.currentBaseStock)}
                         </span>
@@ -767,21 +785,21 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       </td>
 
                       {/* 6. 일사용량 */}
-                      <td className="px-1.5 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                         {item.isQtyBased && item.dailyUsage === 0 ? (
                           <span className="text-slate-400 font-mono text-[11px]">- (수량)</span>
                         ) : (
                           <>
-                            <span className="font-bold font-mono text-slate-800 text-xs">
+                            <span className="font-bold font-mono text-slate-800 text-xs sm:text-sm">
                               {formatNumber(item.dailyUsage)}
                             </span>
-                            <span className="text-[10px] text-slate-500">/일</span>
+                            <span className="text-[11px] text-slate-500">/일</span>
                           </>
                         )}
                       </td>
 
                       {/* 7. 잔여일 */}
-                      <td className="px-1.5 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                      <td className="px-2 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                         {item.isQtyBased && item.dailyUsage === 0 ? (
                           <span className="text-slate-400 font-mono text-[11px]">-</span>
                         ) : (
@@ -802,32 +820,32 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       </td>
 
                       {/* 8. 안전/기준재고 */}
-                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                         {item.isQtyBased ? (
                           <div className="flex flex-col items-end leading-tight">
-                            <span className="font-mono font-bold text-emerald-800 text-xs">
+                            <span className="font-mono font-bold text-emerald-800 text-xs sm:text-sm">
                               {item.triggerPackQty}
                               {item.packUnit} 이하
                             </span>
-                            <span className="text-[10px] text-emerald-700 font-mono">
+                            <span className="text-[10px] text-emerald-700 font-mono mt-0.5">
                               수량({formatNumber(item.triggerBaseQty)}
                               {item.baseUnit})
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-end leading-tight">
-                            <span className="font-mono font-bold text-slate-800 text-xs">
+                            <span className="font-mono font-bold text-slate-800 text-xs sm:text-sm">
                               {formatNumber(item.safetyStockBase)} {item.baseUnit}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
+                            <span className="text-[10px] text-slate-500 font-mono mt-0.5">
                               안전 {category?.safetyDays || 10}일
                             </span>
                           </div>
                         )}
                       </td>
 
-                      {/* 9. 발주(포장·단위) - 발주 포장수량과 입고단위 환산 통합 */}
-                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                      {/* 9. 발주(포장·단위) */}
+                      <td className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                         <div className="leading-tight">
                           <span className="font-extrabold text-slate-900 font-mono text-sm">
                             {formatNumber(item.recommendedPackOrderQty)}
@@ -843,9 +861,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       </td>
 
                       {/* 10. 발주(환산) */}
-                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                      <td className="px-2.5 py-2.5 border-r border-slate-200 text-right whitespace-nowrap">
                         <span
-                          className={`font-mono text-xs ${
+                          className={`font-mono text-xs sm:text-sm ${
                             item.needsOrder
                               ? 'text-rose-600 font-extrabold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200'
                               : item.isOrderImminent
@@ -857,31 +875,31 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         </span>
                       </td>
 
-                      {/* 11. 발주·상태 (신호등 + 진행상태 통합) */}
-                      <td className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                      {/* 11. 발주·상태 */}
+                      <td className="px-2 py-2.5 border-r border-slate-200 text-center whitespace-nowrap">
                         {isAwaiting ? (
-                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[11px]">
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-xs">
                             입고대기
                           </span>
                         ) : item.orderUrgency === 'urgent' ? (
-                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[11px] shadow-2xs">
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-xs shadow-2xs">
                             발주필요
                           </span>
                         ) : item.orderUrgency === 'warning' ? (
-                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-[11px] shadow-2xs">
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-xs shadow-2xs">
                             발주임박
                           </span>
                         ) : (
-                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium text-[11px]">
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium text-xs">
                             발주대기
                           </span>
                         )}
                       </td>
 
                       {/* 12. 발주/입고예정 */}
-                      <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                      <td className="px-2 py-2.5 border-r border-slate-200 text-center">
                         {isAwaiting ? (
-                          <div className="inline-flex items-center gap-1 whitespace-nowrap">
+                          <div className="flex flex-wrap items-center justify-center gap-1">
                             <div
                               className="inline-flex items-center justify-center gap-1 whitespace-nowrap px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200"
                               title={`발주일: ${item.orderDate || item.lastOrderDate || '-'} / 입고예정: ${item.expectedArrivalDate || '-'} (${item.dDayText})`}
@@ -905,37 +923,39 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                                 {item.dDayStatus === 'today' ? 'D-Day' : item.dDayText}
                               </span>
                             </div>
-                            {!isWorkerMode && onEditOrder && (
-                              <button
-                                type="button"
-                                onClick={() => onEditOrder(item)}
-                                className="px-1.5 py-0.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors cursor-pointer"
-                                title="발주일자/입고예정일/발주수량 수정"
-                              >
-                                수정
-                              </button>
-                            )}
-                            {!isWorkerMode && onCancelOrder && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (
-                                    window.confirm(
-                                      `[${item.itemName} ${item.spec}] 발주를 취소하시겠습니까?\n현장 입고대기 목록에서 제거되고 발주대기 상태로 복귀합니다.`
-                                    )
-                                  ) {
-                                    onCancelOrder(item.id);
-                                  }
-                                }}
-                                className="px-1.5 py-0.5 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors cursor-pointer"
-                                title="발주 취소"
-                              >
-                                취소
-                              </button>
-                            )}
+                            <div className="inline-flex items-center gap-1">
+                              {!isWorkerMode && onEditOrder && (
+                                <button
+                                  type="button"
+                                  onClick={() => onEditOrder(item)}
+                                  className="px-1.5 py-0.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors cursor-pointer whitespace-nowrap"
+                                  title="발주일자/입고예정일/발주수량 수정"
+                                >
+                                  수정
+                                </button>
+                              )}
+                              {!isWorkerMode && onCancelOrder && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `[${item.itemName} ${item.spec}] 발주를 취소하시겠습니까?\n현장 입고대기 목록에서 제거되고 발주대기 상태로 복귀합니다.`
+                                      )
+                                    ) {
+                                      onCancelOrder(item.id);
+                                    }
+                                  }}
+                                  className="px-1.5 py-0.5 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors cursor-pointer whitespace-nowrap"
+                                  title="발주 취소"
+                                >
+                                  취소
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ) : isWorkerMode ? (
-                          <span className="text-[11px] text-slate-400 font-medium">
+                          <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
                             읽기전용
                           </span>
                         ) : (
@@ -962,12 +982,12 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       </td>
 
                       {/* 13. 최근발주 */}
-                      <td className="px-1.5 py-2 border-r border-slate-200 text-center font-mono text-slate-600 text-[11px] whitespace-nowrap">
+                      <td className="px-2 py-2.5 border-r border-slate-200 text-center font-mono text-slate-600 text-xs whitespace-nowrap">
                         {formatShortDate(item.lastOrderDate)}
                       </td>
 
                       {/* 14. 관리 */}
-                      <td className="px-1.5 py-2 text-center whitespace-nowrap">
+                      <td className="px-1.5 py-2.5 text-center whitespace-nowrap">
                         {isWorkerMode ? (
                           <span className="text-[11px] text-slate-400 font-bold">잠금</span>
                         ) : (
@@ -1081,7 +1101,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
                   {/* Title & Spec */}
                   <div className="py-1">
-                    <div className="text-sm font-medium text-slate-900 leading-snug">
+                    <div className="text-base font-normal text-slate-900 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
                   </div>

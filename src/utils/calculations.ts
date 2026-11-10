@@ -282,8 +282,8 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-// 공장 표준 관리 라인 순서 ('SL1' > 'SL2' > '아산공장' > '공용')
-export const LINE_ORDER: string[] = ['SL1', 'SL2', '아산공장', '공용', '공용(포장장)'];
+// 공장 표준 관리 라인 순서 ('SL1' > 'SL2' > '공용' > '아산공장')
+export const LINE_ORDER: string[] = ['SL1', 'SL2', '공용', '공용(포장장)', '아산공장', '아산SL'];
 
 export function normalizeLineName(line: string): string {
   if (line === '아산SL' || line === '아산공장') return '아산공장';
@@ -337,8 +337,13 @@ export function compareItemsByDefaultOrder<
     spec: string;
   }
 >(a: T, b: T, categoryOrderMap?: Map<string, number>): number {
-  // 1순위: 라인 지정 순서
+  // 1순위: 라인 지정 순서 (SL1 > SL2 > 공용 > 아산공장)
   const getLineScore = (line: string) => {
+    const normalized = normalizeLineName(line);
+    if (normalized === 'SL1') return 0;
+    if (normalized === 'SL2') return 1;
+    if (normalized === '공용') return 2;
+    if (normalized === '아산공장') return 3;
     const idx = LINE_ORDER.indexOf(line);
     return idx !== -1 ? idx : 999;
   };
