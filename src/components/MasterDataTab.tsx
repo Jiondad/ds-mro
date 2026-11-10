@@ -30,6 +30,7 @@ import {
   X,
   Save,
   MapPin,
+  Loader2,
 } from 'lucide-react';
 
 interface MasterDataTabProps {
@@ -39,6 +40,8 @@ interface MasterDataTabProps {
   units: Unit[];
   userAccounts?: UserAccount[];
   companyProfile?: CompanyProfile;
+  currentUser?: UserAccount | null;
+  isResetting?: boolean;
   onAssignItemReceiver?: (itemId: string, account: UserAccount | null) => void;
   onUpdateItemDeliveryLocation?: (itemId: string, deliveryDetailLocation: string | undefined) => void;
   onUpdateItemLine?: (itemId: string, newLine: ProductionLine) => void;
@@ -53,7 +56,7 @@ interface MasterDataTabProps {
   onEditItem?: (item: CalculatedItem) => void;
   onDeleteItem?: (itemId: string) => void;
   onOpenNewItemModal?: () => void;
-  onResetAllData: () => void;
+  onResetAllData: () => Promise<void> | void;
   onUpdateCompanyProfile?: (profile: CompanyProfile) => void;
   onShowToast?: (message: string) => void;
   onSaveAllChanges?: () => void;
@@ -74,6 +77,8 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   units,
   userAccounts = [],
   companyProfile,
+  currentUser,
+  isResetting = false,
   onAssignItemReceiver,
   onUpdateItemDeliveryLocation,
   onUpdateItemLine,
@@ -347,19 +352,34 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
 
           <button
             type="button"
-            onClick={() => {
-              if (
-                confirm(
-                  '현장 실사 재고와 발주 데이터를 초기 시드 상태로 복원하시겠습니까? (기록된 변경사항이 초기화됩니다)'
-                )
-              ) {
-                onResetAllData();
+            disabled={isResetting}
+            onClick={async () => {
+              // 최고관리자 권한 검증 (Level 0, Level 1 최고관리자 또는 admin)
+              if (currentUser && currentUser.level > 1 && currentUser.username !== 'admin') {
+                onShowToast?.(
+                  '⚠️ 최고관리자(Level 1 / LV.0) 권한이 있는 사용자만 초기 데이터 리셋을 수행할 수 있습니다.'
+                );
+                return;
+              }
+              const confirmed = window.confirm(
+                '현장 실사 재고, 실사 수량 및 발주 데이터를 초기 시드(Seed) 상태로 복원하시겠습니까?\n\n※ 최고관리자 계정 정보와 기본 마스터 데이터는 안전하게 유지되며, 실사/재고/발주 내역만 초기화됩니다.'
+              );
+              if (confirmed) {
+                await onResetAllData();
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+              isResetting
+                ? 'bg-rose-100 text-rose-400 border border-rose-200 cursor-not-allowed opacity-80'
+                : 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 cursor-pointer shadow-2xs'
+            }`}
           >
-            <RotateCcw className="w-4 h-4" />
-            <span>초기 데이터 리셋</span>
+            {isResetting ? (
+              <Loader2 className="w-4 h-4 animate-spin text-rose-600 shrink-0" />
+            ) : (
+              <RotateCcw className="w-4 h-4 shrink-0" />
+            )}
+            <span>{isResetting ? '초기화 진행 중...' : '초기 데이터 리셋'}</span>
           </button>
         </div>
       </div>

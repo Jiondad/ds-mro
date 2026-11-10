@@ -30,6 +30,11 @@ import {
   extractTabFromLocation,
   enforceTabRBAC,
 } from './utils/urlState';
+import {
+  checkPermission,
+  isTabAllowed,
+  getTabAccessDeniedReason,
+} from './utils/rbac';
 import { Header } from './components/Header';
 import { DashboardTab } from './components/DashboardTab';
 import { FieldAuditTab } from './components/FieldAuditTab';
@@ -865,16 +870,14 @@ export default function App() {
   };
 
   const handleTabChangeWithRBAC = (nextTab: ActiveTab) => {
-    const level = currentUser?.level ?? 0;
-    const effectiveWorker = isWorkerMode || level === 1;
-
-    if (effectiveWorker && nextTab !== 'field-audit' && nextTab !== 'dashboard') {
-      showToast('⚠️ [권한 제한] 현장사용자(LV.1) 및 현장 작업자 모드에서는 접근할 수 없는 메뉴입니다.');
+    if (!isTabAllowed(nextTab, currentUser)) {
+      const reason = getTabAccessDeniedReason(nextTab, currentUser);
+      showToast(reason);
       return;
     }
 
-    if (level !== 0 && (nextTab === 'master-data' || nextTab === 'account-management')) {
-      showToast('⚠️ [권한 제한] 기준정보 관리 및 계정 관리 메뉴는 LV.0 최고관리자만 접근할 수 있습니다.');
+    if (isWorkerMode && nextTab !== 'field-audit' && nextTab !== 'dashboard') {
+      showToast('⚠️ [현장 작업자 모드] 작업자 모드에서는 실사 및 대시보드만 조회할 수 있습니다.');
       return;
     }
 
@@ -883,8 +886,8 @@ export default function App() {
   };
 
   const handleToggleWorkerMode = () => {
-    if (currentUser?.level === 1) {
-      showToast('LV.1 현장사용자 계정은 기본 현장 전용 뷰로 고정되어 있습니다.');
+    if (currentUser?.level === 2) {
+      showToast('LV.2 현장사용자 계정은 현장 실사 및 모니터링 전용으로 고정되어 있습니다.');
       return;
     }
     setIsWorkerMode((prev) => {
@@ -904,6 +907,13 @@ export default function App() {
   };
 
   const handleUpdateStock = (itemId: string, newPackStock: number) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    const perm = checkPermission('edit_field_stock', currentUser, { targetItem });
+    if (!perm.allowed) {
+      showToast(perm.reason || '⚠️ 재고 실사 수정 권한이 없습니다.');
+      return;
+    }
+
     const now = new Date();
     const timeStr = `${TODAY_STR} ${String(now.getHours()).padStart(2, '0')}:${String(
       now.getMinutes()
@@ -992,6 +1002,12 @@ export default function App() {
   };
 
   const handleBatchCommitStock = (changes: Record<string, number>) => {
+    const perm = checkPermission('batch_commit_audit', currentUser);
+    if (!perm.allowed) {
+      showToast(perm.reason || '⚠️ 실사 데이터 일괄 확정 권한이 없습니다.');
+      return;
+    }
+
     const changeCount = Object.keys(changes).length;
     if (changeCount === 0) return;
 
@@ -1127,6 +1143,12 @@ export default function App() {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
+    const perm = checkPermission('confirm_receipt', currentUser, { targetItem });
+    if (!perm.allowed) {
+      showToast(perm.reason || '⚠️ 입고확정 처리 권한이 없습니다.');
+      return;
+    }
+
     const calc = calculateItemMetrics(
       targetItem,
       categories.find((c) => c.id === targetItem.categoryId),
@@ -1229,6 +1251,12 @@ export default function App() {
     expectedArrivalDate: string,
     quantities: Record<string, number>
   ) => {
+    const perm = checkPermission('create_purchase_order', currentUser);
+    if (!perm.allowed) {
+      showToast(perm.reason || '⚠️ 발주서 발행 권한이 없습니다.');
+      return;
+    }
+
     const finalOrderDate = orderDate || TODAY_STR;
     setItems((prev) =>
       prev.map((it) => {
@@ -1611,9 +1639,12 @@ export default function App() {
     showToast('초기화가 완료되었습니다. (모든 데이터가 비워졌습니다)');
   };
 
-  const isEffectiveWorkerMode = isWorkerMode || currentUser?.level === 1;
-  const canAccessOfficeTabs = !isEffectiveWorkerMode && currentUser?.level !== 1;
-  const canAccessMasterData = !isEffectiveWorkerMode && (currentUser?.level ?? 0) === 0;
+  const isEffectiveWorkerMode = isWorkerMode || currentUser?.level === 2;
+  const canAccessFieldAudit = isTabAllowed('field-audit', currentUser);
+  const canAccessOrderSheet = isTabAllowed('order-sheet', currentUser);
+  const canAccessStats = isTabAllowed('stats', currentUser);
+  const canAccessMasterData = isTabAllowed('master-data', currentUser);
+  const canAccessAccountManagement = isTabAllowed('account-management', currentUser);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -1667,7 +1698,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'field-audit' && (
+        {activeTab === 'field-audit' && canAccessFieldAudit && (
           <FieldAuditTab
             items={calculatedItems}
             categories={categories}
@@ -1681,13 +1712,14 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'order-sheet' && canAccessOfficeTabs && (
+        {activeTab === 'order-sheet' && canAccessOrderSheet && (
           <OrderManagementTab
             items={calculatedItems}
             vendors={vendors}
             orderHistory={orderHistory}
             usageLogs={usageLogs}
             companyProfile={companyProfile}
+            currentUser={currentUser}
             onConfirmOrder={handleConfirmOrder}
             onOpenPOMetaModal={handleOpenPOMetaModal}
             onUpdateOrder={handleUpdateOrder}
@@ -1730,20 +1762,21 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'stats' && canAccessOfficeTabs && (
+        {activeTab === 'stats' && canAccessStats && (
           <UsageStatsTab
             items={calculatedItems}
             categories={categories}
             usageLogs={usageLogs}
             companyProfile={companyProfile}
             orderHistory={orderHistory}
+            currentUser={currentUser}
             onApplyActualDailyUsage={handleApplyActualDailyUsage}
             onBatchApplyActualDailyUsage={handleBatchApplyActualDailyUsage}
             onShowToast={showToast}
           />
         )}
 
-        {activeTab === 'account-management' && canAccessMasterData && (
+        {activeTab === 'account-management' && canAccessAccountManagement && (
           <AccountManagementTab
             accounts={userAccounts}
             items={calculatedItems}
@@ -1790,7 +1823,7 @@ export default function App() {
               it.orderedPackQty || it.recommendedPackOrderQty;
           });
           handleConfirmOrder(
-            poModaldata.items.map((i) => i.id),
+            poModalData.items.map((i) => i.id),
             poModalData.orderDate,
             poModalData.expectedArrivalDate,
             quantities

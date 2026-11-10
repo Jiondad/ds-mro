@@ -10,11 +10,41 @@ interface LoginModalProps {
   registeredUsers?: UserAccount[];
 }
 
-// 사내 등록된 표준 계정 데이터베이스 (실무형)
+// 사내 등록된 표준 계정 데이터베이스 (4단계 RBAC)
 export const SYSTEM_USERS: UserAccount[] = [
-  { id: 'usr_admin', username: 'admin', name: '최고관리자 (System Admin)', level: 0 },
-  { id: 'usr_field', username: 'field1', name: '현장실사 담당자 (Field Operator)', level: 1 },
-  { id: 'usr_office', username: 'office1', name: '사무실 관리자 (Office Manager)', level: 2 },
+  {
+    id: 'usr_admin',
+    username: 'admin',
+    name: '김종현 실장',
+    level: 0,
+    roleLabel: 'LV.0 최고관리자',
+    department: '관리팀',
+  },
+  {
+    id: 'usr_field_mgr',
+    username: 'field_mgr',
+    name: '박총괄 팀장',
+    level: 1,
+    roleLabel: 'LV.1 현장관리자',
+    department: '생산관리팀',
+  },
+  {
+    id: 'usr_field_sl1',
+    username: 'field_sl1',
+    name: '박현장 반장',
+    level: 2,
+    roleLabel: 'LV.2 현장사용자',
+    affiliation: 'SL1',
+    department: 'SL1',
+  },
+  {
+    id: 'usr_office',
+    username: 'office1',
+    name: '이지원 대리',
+    level: 3,
+    roleLabel: 'LV.3 사무실사용자',
+    department: '구매자재팀',
+  },
 ];
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -117,6 +147,33 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             >
               로그인 (Sign In)
             </button>
+          </div>
+
+          {/* Quick RBAC Role Selector for convenience */}
+          <div className="pt-3 border-t border-slate-200">
+            <span className="block text-[11px] font-bold text-slate-500 mb-1.5 text-center">
+              권한별 테스트 계정 간편 선택 (초기PW: 1234)
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SYSTEM_USERS.map((su) => (
+                <button
+                  key={su.id}
+                  type="button"
+                  onClick={() => {
+                    setUsername(su.username);
+                    setPassword('1234');
+                  }}
+                  className={`px-2 py-1.5 rounded-lg border text-left transition-colors cursor-pointer text-[11px] ${
+                    username === su.username
+                      ? 'border-blue-500 bg-blue-50/80 font-bold text-blue-900'
+                      : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium'
+                  }`}
+                >
+                  <div className="truncate font-bold">{su.roleLabel}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{su.name} ({su.username})</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Password Change Trigger */}

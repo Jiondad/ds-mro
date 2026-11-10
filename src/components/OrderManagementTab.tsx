@@ -5,6 +5,7 @@ import {
   OrderHistoryRecord,
   OrderHistoryStatus,
   UsageLog,
+  UserAccount,
   Vendor,
 } from '../types';
 import {
@@ -77,6 +78,7 @@ interface OrderManagementTabProps {
   onUpdateOrderHistoryRecord: (record: OrderHistoryRecord) => void;
   onDeleteOrderHistoryRecord: (recordId: string) => void;
   onShowToast: (message: string) => void;
+  currentUser?: UserAccount | null;
 }
 
 const VALID_ORDER_SUB_TABS = ['create', 'history'] as const;
@@ -88,6 +90,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
   orderHistory,
   usageLogs = [],
   companyProfile,
+  currentUser,
   onConfirmOrder,
   onOpenPOMetaModal,
   onUpdateOrder,
@@ -97,6 +100,12 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
   onShowToast,
 }) => {
   const activeProfile = companyProfile || INITIAL_COMPANY_PROFILE;
+  // 발주 조작 권한 (Level 0 최고관리자 및 Level 3 사무실사용자만 가능 / Level 1 현장관리자는 절대 불가)
+  const canEditOrders =
+    !currentUser ||
+    currentUser.level === 0 ||
+    currentUser.level === 3 ||
+    currentUser.username === 'admin';
   // Main Sub-Tab: 'create' (신규 발주서 작성) vs 'history' (발주 진행 & 이력 관리)
   const [activeSubTab, setActiveSubTab] = useUrlPersistedState<'create' | 'history'>(
     'orderSub',
@@ -444,6 +453,12 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
     vendor: Vendor,
     vendorItems: CalculatedItem[]
   ) => {
+    if (!canEditOrders) {
+      onShowToast(
+        '⚠️ [직무 영역 분리] 현장관리자(Level 1)는 발주서 발행 및 발주 데이터 수정 권한이 없습니다. 구매자재 담당자(Level 3)에게 요청하세요.'
+      );
+      return;
+    }
     const itemsToOrder = getSelectedItemsForVendor(vendor, vendorItems);
     if (itemsToOrder.length === 0) {
       alert('발주할 품목을 선택해주세요.');
@@ -522,6 +537,12 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
   // Single item open PO
   const handleOpenSingleItemPO = (it: CalculatedItem) => {
+    if (!canEditOrders) {
+      onShowToast(
+        '⚠️ [직무 영역 분리] 현장관리자(Level 1)는 발주서 발행 및 발주 데이터 수정 권한이 없습니다. 구매자재 담당자(Level 3)에게 요청하세요.'
+      );
+      return;
+    }
     const v = vendors.find((vend) => vend.id === it.vendorId) || {
       id: it.vendorId,
       name: it.vendorName,
@@ -538,6 +559,12 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
   // Single item cancel order
   const handleCancelSingleOrder = (it: CalculatedItem) => {
+    if (!canEditOrders) {
+      onShowToast(
+        '⚠️ [직무 영역 분리] 현장관리자(Level 1)는 발주서 발행 및 발주 데이터 수정 권한이 없습니다. 구매자재 담당자(Level 3)에게 요청하세요.'
+      );
+      return;
+    }
     if (
       window.confirm(
         `[${it.itemName} ${it.spec}] 발주를 취소하시겠습니까?\n\n현장 입고대기 목록에서 즉시 제거되며, 발주대기 상태로 복귀합니다.`
@@ -549,6 +576,12 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
   // Delete history record
   const handleDeleteHistory = (recordId: string, itemName: string) => {
+    if (!canEditOrders) {
+      onShowToast(
+        '⚠️ [직무 영역 분리] 발주 이력 데이터 삭제 권한이 없습니다.'
+      );
+      return;
+    }
     if (
       window.confirm(
         `[${itemName}] 발주 이력 레코드를 완전히 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`
@@ -607,6 +640,26 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
   return (
     <div className="space-y-5">
+      {/* [RBAC 권한 제어] 현장관리자(Level 1) 및 발주 권한 없는 사용자 안내 배너 */}
+      {!canEditOrders && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex items-start gap-3 shadow-xs animate-in fade-in">
+          <div className="p-2 bg-amber-500 text-white rounded-lg shrink-0 mt-0.5">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="flex-1 text-xs sm:text-sm">
+            <div className="font-extrabold text-amber-950 flex items-center gap-2 flex-wrap">
+              <span>⚠️ [직무 영역 분리 / RBAC] 발주서 발행 및 수정 권한 제한 안내</span>
+              <span className="text-[11px] px-2 py-0.5 bg-amber-200 text-amber-900 rounded font-black">
+                {currentUser?.roleLabel || `LV.${currentUser?.level ?? 1}`} (조회 전용)
+              </span>
+            </div>
+            <p className="text-amber-900 mt-1 leading-relaxed">
+              현재 로그인한 계정은 <strong>발주서 발행 및 발주 데이터 수정 권한이 없습니다</strong>. 현장 재고 모니터링 및 발주 현황 조회만 가능하며, 거래처 발주서 발행, 품목 수량 변경, 발주 취소 등은 <strong>사무실사용자(Level 3)</strong> 및 <strong>최고관리자(Level 0)</strong>만 실행 가능합니다.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* [기능 3] 월별 소모품 예산 한도(Budget) 진척도 프로그레스 바 & 초과 경고 배지 */}
       <div
         className={`rounded-xl border p-4 sm:p-5 shadow-xs transition-all ${
@@ -1323,7 +1376,13 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                     {/* Confirm Order in System */}
                     <button
                       onClick={() => handleConfirmOrderForVendor(vendor, allVendorItems)}
-                      className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer w-full sm:w-auto active:scale-98"
+                      disabled={!canEditOrders}
+                      className={`flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold transition-colors shadow-sm cursor-pointer w-full sm:w-auto active:scale-98 ${
+                        canEditOrders
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-slate-300 text-slate-500 cursor-not-allowed hover:bg-slate-300'
+                      }`}
+                      title={!canEditOrders ? '사무실사용자(Level 3) 및 최고관리자만 발주 확정이 가능합니다.' : undefined}
                     >
                       <Send className="w-4 h-4" />
                       <span>발주 확정 &amp; 입고예정 등록</span>

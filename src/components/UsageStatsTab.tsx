@@ -6,6 +6,7 @@ import {
   OrderHistoryRecord,
   ProductionLine,
   UsageLog,
+  UserAccount,
 } from '../types';
 import {
   formatCurrency,
@@ -67,6 +68,7 @@ interface UsageStatsTabProps {
   usageLogs: UsageLog[];
   companyProfile?: CompanyProfile;
   orderHistory?: OrderHistoryRecord[];
+  currentUser?: UserAccount | null;
   onApplyActualDailyUsage: (itemId: string, actualDailyUsage: number) => void;
   onBatchApplyActualDailyUsage?: (updates: Record<string, number>) => void;
   onShowToast: (message: string) => void;
@@ -88,10 +90,17 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
   usageLogs,
   companyProfile,
   orderHistory = [],
+  currentUser,
   onApplyActualDailyUsage,
   onBatchApplyActualDailyUsage,
   onShowToast,
 }) => {
+  // 안전재고 자동 보정 권한: Level 1 현장관리자 & Level 0 최고관리자 (Level 3 사무실사용자는 불가)
+  const canCalibrateSafetyStock =
+    !currentUser ||
+    currentUser.level === 0 ||
+    currentUser.level === 1 ||
+    currentUser.username === 'admin';
   // 3개 서브 탭 분리 상태: 'dashboard' | 'monthly-matrix' | 'safety-stock'
   const [activeSubTab, setActiveSubTab] = useUrlPersistedState<UsageStatsSubTab>(
     'statsSubTab',
@@ -1079,6 +1088,12 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     recommendedSafetyBase: number,
     baseUnit: string
   ) => {
+    if (!canCalibrateSafetyStock) {
+      onShowToast(
+        '⚠️ [직무 영역 분리] 사무실사용자(Level 3)는 안전재고 일사용량 보정 권한이 없습니다. 현장관리자(Level 1)에게 요청하세요.'
+      );
+      return;
+    }
     onApplyActualDailyUsage(itemId, recommendedValue);
     onShowToast(
       `[개별 보정 완료] ${itemName} 기준 일소모량이 추천값 '${recommendedValue}${baseUnit}/일' (권장 안전재고 ${formatNumber(recommendedSafetyBase)}${baseUnit})로 즉시 반영되었습니다.`
@@ -1087,6 +1102,12 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
 
   // Batch calibration handler ([기능 2] 추천값으로 일소모량 일괄 반영)
   const handleBatchApplyCalibration = () => {
+    if (!canCalibrateSafetyStock) {
+      onShowToast(
+        '⚠️ [직무 영역 분리] 사무실사용자(Level 3)는 안전재고 일사용량 보정 권한이 없습니다. 현장관리자(Level 1)에게 요청하세요.'
+      );
+      return;
+    }
     if (warningDeviationItems.length === 0) return;
 
     const updates: Record<string, number> = {};
@@ -2445,6 +2466,24 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
          ======================================================== */}
       {activeSubTab === 'safety-stock' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* [RBAC 권한 제어] 사무실사용자(Level 3) 안전재고 보정 권한 제한 안내 배너 */}
+          {!canCalibrateSafetyStock && (
+            <div className="p-3.5 bg-amber-50 border-b border-amber-300 flex items-start gap-3 text-xs text-amber-900 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-extrabold text-amber-950 flex items-center gap-2">
+                  <span>⚠️ [직무 영역 분리 / RBAC] 안전재고 자동 보정 권한 제한</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded font-black">
+                    {currentUser?.roleLabel || `LV.${currentUser?.level ?? 3}`} (조회 전용)
+                  </span>
+                </span>
+                <p className="mt-0.5 text-slate-700 leading-relaxed">
+                  사무실사용자(Level 3)는 통계 분석 및 발주 연계용 지표 조회만 가능합니다. 현장 안전재고 및 기준 일소모량의 실질적인 보정 반영은 <strong>현장관리자(Level 1)</strong> 및 <strong>최고관리자(Level 0)</strong>만 실행 가능합니다.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Header Controls & Filters */}
           <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/70 space-y-3">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
@@ -2484,13 +2523,17 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                 <button
                   type="button"
                   onClick={handleBatchApplyCalibration}
-                  disabled={warningDeviationCount === 0}
+                  disabled={warningDeviationCount === 0 || !canCalibrateSafetyStock}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all shadow-xs ${
-                    warningDeviationCount > 0
+                    warningDeviationCount > 0 && canCalibrateSafetyStock
                       ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-200 cursor-pointer active:scale-95'
                       : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                   }`}
-                  title="±20% 이상 편차가 발생한 모든 품목의 기준 일소모량을 추천 학습값으로 한 번에 업데이트합니다"
+                  title={
+                    !canCalibrateSafetyStock
+                      ? '사무실사용자(Level 3)는 안전재고 일소모량 보정 권한이 없습니다.'
+                      : '±20% 이상 편차가 발생한 모든 품목의 기준 일소모량을 추천 학습값으로 한 번에 업데이트합니다'
+                  }
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span>추천값으로 일소모량 일괄 반영 ({warningDeviationCount}건)</span>
@@ -2666,8 +2709,17 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                                   stat.item.baseUnit
                                 )
                               }
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded shadow-2xs transition-all cursor-pointer active:scale-95"
-                              title={`기준 일소모량(${stat.item.dailyUsage})을 추천 보정값(${stat.recommendedDailyUsage})으로 즉시 업데이트`}
+                              disabled={!canCalibrateSafetyStock}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-extrabold rounded shadow-2xs transition-all ${
+                                canCalibrateSafetyStock
+                                  ? 'text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer active:scale-95'
+                                  : 'text-slate-400 bg-slate-200 cursor-not-allowed'
+                              }`}
+                              title={
+                                !canCalibrateSafetyStock
+                                  ? '사무실사용자(Level 3)는 안전재고 일소모량 보정 권한이 없습니다.'
+                                  : `기준 일소모량(${stat.item.dailyUsage})을 추천 보정값(${stat.recommendedDailyUsage})으로 즉시 업데이트`
+                              }
                             >
                               <RefreshCw className="w-3 h-3" />
                               <span>추천값 반영</span>
@@ -2775,7 +2827,12 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                               stat.item.baseUnit
                             )
                           }
-                          className="px-2.5 py-1 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded shadow-2xs transition-colors cursor-pointer"
+                          disabled={!canCalibrateSafetyStock}
+                          className={`px-2.5 py-1 text-xs font-extrabold rounded shadow-2xs transition-colors ${
+                            canCalibrateSafetyStock
+                              ? 'text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                              : 'text-slate-400 bg-slate-200 cursor-not-allowed'
+                          }`}
                         >
                           반영
                         </button>

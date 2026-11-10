@@ -8,6 +8,7 @@ import {
   isAsanLine,
   matchLineFilter,
 } from '../utils/calculations';
+import { checkItemAssignedToUser } from '../utils/rbac';
 import { useUrlPersistedState } from '../utils/urlState';
 import {
   ClipboardCheck,
@@ -301,25 +302,12 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   const totalImminentCount = items.filter((i) => i.isOrderImminent).length;
 
   // Helper: check if an item belongs to a specific UserAccount
+  // Helper: check if an item belongs to a specific UserAccount (4단계 RBAC)
   const doesItemMatchAccount = (item: CalculatedItem, acc: UserAccount) => {
-    if (item.receiverLoginId && item.receiverLoginId.trim() === acc.username.trim()) {
-      return true;
-    }
-    const itemRecName = (item.receiverName || '').trim();
-    if (!itemRecName) return false;
-    const accName = acc.name.trim();
-    const accFullName =
-      acc.title && !accName.includes(acc.title)
-        ? `${accName} ${acc.title}`.trim()
-        : accName;
-    return (
-      itemRecName === accName ||
-      itemRecName === accFullName ||
-      itemRecName.startsWith(accName + ' ')
-    );
+    return checkItemAssignedToUser(item, acc);
   };
 
-  // 최상위 관리자 계정 여부 판별 (최상위 관리자는 모든 품목의 실사 및 입고확정을 예외 없이 조작 가능)
+  // 최상위 관리자 계정 여부 판별 (Level 0 또는 admin)
   const isTopAdminUser = useMemo(() => {
     if (!currentUser) return true;
     if (currentUser.level === 0 || currentUser.username === 'admin') return true;
@@ -328,9 +316,16 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   }, [currentUser]);
 
   // 현재 로그인한 사용자가 해당 품목 행의 실사 수량 입력 및 입고확정을 조작할 수 있는지 판별
+  // - Level 0 (최고관리자): 전체 품목 전권 보유
+  // - Level 1 (현장관리자): 현장 내 모든 라인의 재고/실사/사용량 데이터 수정 가능
+  // - Level 2 (현장사용자): 본인 소속 라인의 담당 수령 품목에 한정하여 수정 가능
+  // - Level 3 (사무실사용자): 현장 자재/재고 수정 및 현장 실사 처리 불가 (읽기 전용)
   const canUserEditItem = (item: CalculatedItem): boolean => {
-    if (isTopAdminUser || !currentUser) return true;
-    return doesItemMatchAccount(item, currentUser);
+    if (!currentUser) return true;
+    if (isTopAdminUser) return true;
+    if (currentUser.level === 1) return true;
+    if (currentUser.level === 3) return false;
+    return checkItemAssignedToUser(item, currentUser);
   };
 
   // Simple receiver options from registered userAccounts
@@ -483,6 +478,21 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
           >
             확인
           </button>
+        </div>
+      )}
+
+      {/* Level 3 Office User Read-Only Banner */}
+      {currentUser?.level === 3 && (
+        <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl flex items-center justify-between gap-3 text-amber-900 text-xs font-semibold shadow-2xs">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>[직무 영역 분리 안내]</strong> 사무실사용자(Level 3) 권한으로 접속 중입니다. 현장 자재/재고 수정 및 실사·입고 처리는 불가하며 조회 전용으로 제공됩니다.
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 font-bold text-[10px] shrink-0">
+            조회 전용 (Read-Only)
+          </span>
         </div>
       )}
 
@@ -990,7 +1000,10 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       : 999;
                   const canEdit = canUserEditItem(item);
                   const assignedReceiverLabel = getItemReceiverDisplay(item) || '미지정';
-                  const noPermissionTooltip = `본인 담당 수령 품목이 아닙니다 (담당 수령인: ${assignedReceiverLabel})`;
+                  const noPermissionTooltip =
+                    currentUser?.level === 3
+                      ? '사무실사용자(Level 3)는 현장 자재/재고 수정 및 현장 실사 처리가 불가합니다.'
+                      : `본인 소속 라인의 담당 수령 품목이 아닙니다 (담당 수령인: ${assignedReceiverLabel})`;
 
                   return (
                     <tr

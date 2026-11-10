@@ -52,8 +52,10 @@ export function extractTabFromLocation(): ActiveTab | null {
   return null;
 }
 
+import { isTabAllowed } from './rbac';
+
 /**
- * 사용자 권한(RBAC) 및 작업자 모드 여부를 고려하여 허용 가능한 탭으로 보정합니다.
+ * 4단계 사용자 권한(RBAC) 및 작업자 모드 여부를 고려하여 허용 가능한 탭으로 보정합니다.
  */
 export function enforceTabRBAC(
   candidateTab: ActiveTab,
@@ -61,27 +63,34 @@ export function enforceTabRBAC(
   isWorkerMode: boolean
 ): ActiveTab {
   if (!user) {
-    // 로그인 전에도 사용자가 진입한 URL 탭을 유지해 두면 로그인 직후 권한에 맞게 연결됩니다.
     return candidateTab;
   }
 
-  const effectiveWorker = isWorkerMode || user.level === 1;
-  if (effectiveWorker) {
+  // 작업자 간소화 모드가 켜져 있고 현장 접근 가능한 계정인 경우
+  if (isWorkerMode && user.level !== 3) {
     if (candidateTab !== 'field-audit' && candidateTab !== 'dashboard') {
       return 'field-audit';
     }
     return candidateTab;
   }
 
-  if (user.level === 2) {
-    if (candidateTab === 'master-data' || candidateTab === 'account-management') {
-      return 'dashboard';
-    }
+  // 4단계 RBAC 권한 검사
+  if (isTabAllowed(candidateTab, user)) {
     return candidateTab;
   }
 
-  // LV.0 최고관리자: 모든 탭 접근 허용
-  return candidateTab;
+  // 권한 미달 시 각 역할별 최적의 기본 탭으로 리다이렉트
+  switch (user.level) {
+    case 1: // 현장관리자
+      return 'field-audit';
+    case 2: // 현장사용자
+      return 'field-audit';
+    case 3: // 사무실사용자
+      return 'order-sheet';
+    case 0:
+    default:
+      return 'dashboard';
+  }
 }
 
 /**
@@ -104,10 +113,18 @@ export function resolveInitialActiveTab(
     }
   } catch {}
 
-  if (user?.level === 1 || isWorkerMode) {
-    return 'field-audit';
+  if (!user) return 'dashboard';
+
+  switch (user.level) {
+    case 1: // 현장관리자
+    case 2: // 현장사용자
+      return 'field-audit';
+    case 3: // 사무실사용자
+      return 'order-sheet';
+    case 0:
+    default:
+      return isWorkerMode ? 'field-audit' : 'dashboard';
   }
-  return 'dashboard';
 }
 
 /**

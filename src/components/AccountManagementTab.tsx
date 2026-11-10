@@ -122,9 +122,10 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
       }
 
       if (roleFilter !== '전체') {
-        if (roleFilter === 'field' && acc.level !== 1) return false;
-        if (roleFilter === 'office' && acc.level !== 2) return false;
         if (roleFilter === 'admin' && acc.level !== 0) return false;
+        if (roleFilter === 'field_mgr' && acc.level !== 1) return false;
+        if (roleFilter === 'field_user' && acc.level !== 2) return false;
+        if (roleFilter === 'office' && acc.level !== 3) return false;
       }
 
       if (searchQuery.trim()) {
@@ -149,18 +150,26 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
         </span>
       );
     }
+    if (lvl === 1) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
+          <HardHat className="w-3.5 h-3.5 text-blue-600" />
+          <span>현장관리자 (LV.1)</span>
+        </span>
+      );
+    }
     if (lvl === 2) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-          <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
-          <span>사무실관리자 (LV.2)</span>
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+          <HardHat className="w-3.5 h-3.5 text-amber-600" />
+          <span>현장사용자 (LV.2)</span>
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
-        <HardHat className="w-3.5 h-3.5 text-blue-600" />
-        <span>현장사용자 (LV.1)</span>
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+        <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+        <span>사무실사용자 (LV.3)</span>
       </span>
     );
   };
@@ -216,7 +225,13 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
     }
 
     const roleLabel =
-      level === 0 ? 'LV.0 최고관리자' : level === 2 ? 'LV.2 사무실관리자' : 'LV.1 현장사용자';
+      level === 0
+        ? 'LV.0 최고관리자'
+        : level === 1
+        ? 'LV.1 현장관리자'
+        : level === 2
+        ? 'LV.2 현장사용자'
+        : 'LV.3 사무실사용자';
 
     const newAcc: UserAccount = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -278,9 +293,11 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
     const roleLabel =
       editingAccount.level === 0
         ? 'LV.0 최고관리자'
+        : editingAccount.level === 1
+        ? 'LV.1 현장관리자'
         : editingAccount.level === 2
-        ? 'LV.2 사무실관리자'
-        : 'LV.1 현장사용자';
+        ? 'LV.2 현장사용자'
+        : 'LV.3 사무실사용자';
 
     const updatedRecord: UserAccount = {
       ...editingAccount,
@@ -297,8 +314,8 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
     setEditingAccount(null);
   };
 
-  const totalFieldUsers = accounts.filter((a) => a.level === 1).length;
-  const totalManagers = accounts.filter((a) => a.level === 0 || a.level === 2).length;
+  const totalFieldUsers = accounts.filter((a) => a.level === 1 || a.level === 2).length;
+  const totalManagers = accounts.filter((a) => a.level === 0 || a.level === 3).length;
   const initialPwCount = accounts.filter((a) => {
     const pw = userPasswords[a.username];
     return !pw || pw === '1234';
@@ -469,9 +486,10 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
               onChange={(e) => setLevel(Number(e.target.value) as UserLevel)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-blue-500"
             >
-              <option value={1}>현장사용자 (LV.1 · 실사/입고)</option>
-              <option value={2}>사무실관리자 (LV.2 · 발주/통계)</option>
-              <option value={0}>최고관리자 (LV.0 · 전체권한)</option>
+              <option value={2}>현장사용자 (LV.2 · 소속라인 실사/입고)</option>
+              <option value={1}>현장관리자 (LV.1 · 전라인 실사/재고/통계)</option>
+              <option value={3}>사무실사용자 (LV.3 · 발주발행/전사통계)</option>
+              <option value={0}>최고관리자 (LV.0 · 전체 권한 및 계정관리)</option>
             </select>
           </div>
 
@@ -513,9 +531,10 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
             className="text-xs border border-slate-300 rounded-md px-2.5 py-1 bg-white text-slate-800"
           >
             <option value="전체">전체 권한</option>
-            <option value="field">현장사용자 (LV.1)</option>
-            <option value="office">사무실관리자 (LV.2)</option>
             <option value="admin">최고관리자 (LV.0)</option>
+            <option value="field_mgr">현장관리자 (LV.1)</option>
+            <option value="field_user">현장사용자 (LV.2)</option>
+            <option value="office">사무실사용자 (LV.3)</option>
           </select>
         </div>
 
@@ -840,9 +859,10 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
                   }
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-900"
                 >
-                  <option value={1}>현장사용자 (LV.1 · 실사/입고)</option>
-                  <option value={2}>사무실관리자 (LV.2 · 발주/통계)</option>
-                  <option value={0}>최고관리자 (LV.0 · 전체권한)</option>
+                  <option value={2}>현장사용자 (LV.2 · 소속라인 실사/입고)</option>
+                  <option value={1}>현장관리자 (LV.1 · 전라인 실사/재고/통계)</option>
+                  <option value={3}>사무실사용자 (LV.3 · 발주발행/전사통계)</option>
+                  <option value={0}>최고관리자 (LV.0 · 전체 권한 및 계정관리)</option>
                 </select>
               </div>
 
