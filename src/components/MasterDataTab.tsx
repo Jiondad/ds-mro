@@ -28,6 +28,7 @@ import {
   Search,
   X,
   Save,
+  MapPin,
 } from 'lucide-react';
 
 interface MasterDataTabProps {
@@ -38,6 +39,7 @@ interface MasterDataTabProps {
   userAccounts?: UserAccount[];
   companyProfile?: CompanyProfile;
   onAssignItemReceiver?: (itemId: string, account: UserAccount | null) => void;
+  onUpdateItemDeliveryLocation?: (itemId: string, deliveryDetailLocation: string | undefined) => void;
   onUpdateCategory: (cat: Category) => void;
   onAddCategory: (cat: Category) => void;
   onDeleteCategory: (id: string) => void;
@@ -64,6 +66,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
   userAccounts = [],
   companyProfile,
   onAssignItemReceiver,
+  onUpdateItemDeliveryLocation,
   onUpdateCategory,
   onAddCategory,
   onDeleteCategory,
@@ -164,6 +167,9 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
     return new Map(categories.map((c, idx) => [c.id, idx]));
   }, [categories]);
 
+  // Inline delivery location draft state per item ID
+  const [locationDrafts, setLocationDrafts] = useState<Record<string, string>>({});
+
   // Sort items strictly according to 3-tier fixed order: 라인 > 카테고리 > 품목명
   const sortedMasterItems = useMemo(() => {
     return [...items]
@@ -176,7 +182,8 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
           it.vendorName.toLowerCase().includes(q) ||
           it.categoryName.toLowerCase().includes(q) ||
           it.line.toLowerCase().includes(q) ||
-          (it.receiverName && it.receiverName.toLowerCase().includes(q))
+          (it.receiverName && it.receiverName.toLowerCase().includes(q)) ||
+          (it.deliveryLocation && it.deliveryLocation.toLowerCase().includes(q))
         );
       })
       .sort((a, b) => compareItemsByDefaultOrder(a, b, categoryOrderMap));
@@ -206,6 +213,15 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
       alert('카테고리명을 입력해주세요.');
       return;
     }
+    const cleanedLineLocs: NonNullable<Category['lineDeliveryLocations']> = {};
+    if (editingCategory.lineDeliveryLocations) {
+      (['SL1', 'SL2', '공용', '아산공장'] as const).forEach((ln) => {
+        const val = editingCategory.lineDeliveryLocations?.[ln]?.trim();
+        if (val) {
+          cleanedLineLocs[ln] = val;
+        }
+      });
+    }
     onUpdateCategory({
       ...editingCategory,
       name: editingCategory.name.trim(),
@@ -214,6 +230,8 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
       defaultTriggerPackQty: Number(editingCategory.defaultTriggerPackQty) || 5,
       defaultOrderPackQty: Number(editingCategory.defaultOrderPackQty) || 10,
       deliveryLocation: editingCategory.deliveryLocation?.trim() || undefined,
+      lineDeliveryLocations:
+        Object.keys(cleanedLineLocs).length > 0 ? cleanedLineLocs : undefined,
       description: editingCategory.description?.trim() || undefined,
     });
     setEditingCategory(null);
@@ -430,8 +448,8 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                     <th className="px-3.5 py-3 border-r border-slate-200 min-w-[210px]">
                       수령자(담당자)
                     </th>
-                    <th className="px-3.5 py-3 border-r border-slate-200 min-w-[170px]">
-                      납품처 (하역위치)
+                    <th className="px-3.5 py-3 border-r border-slate-200 min-w-[260px]">
+                      수령장소 (라인·품목별 하역위치)
                     </th>
                     <th className="px-3.5 py-3 border-r border-slate-200 text-center w-32">
                       입고단위 환산
@@ -539,9 +557,101 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                             )}
                           </td>
                           <td className="px-3.5 py-3 border-r border-slate-200 text-slate-800 font-normal">
-                            <span className="text-sm font-normal text-slate-900">
-                              {item.deliveryDetailLocation || item.deliveryLocation || '-'}
-                            </span>
+                            {onUpdateItemDeliveryLocation ? (
+                              <div className="space-y-1 min-w-[240px]">
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={
+                                      locationDrafts[item.id] !== undefined
+                                        ? locationDrafts[item.id]
+                                        : item.deliveryDetailLocation || ''
+                                    }
+                                    placeholder={
+                                      item.defaultDeliveryLocation ||
+                                      item.deliveryLocation ||
+                                      '라인 기본 수령장소 입력'
+                                    }
+                                    onChange={(e) =>
+                                      setLocationDrafts((prev) => ({
+                                        ...prev,
+                                        [item.id]: e.target.value,
+                                      }))
+                                    }
+                                    onBlur={() => {
+                                      if (locationDrafts[item.id] !== undefined) {
+                                        const nextVal = locationDrafts[item.id].trim();
+                                        const currentVal = (item.deliveryDetailLocation || '').trim();
+                                        if (nextVal !== currentVal) {
+                                          onUpdateItemDeliveryLocation(
+                                            item.id,
+                                            nextVal || undefined
+                                          );
+                                        }
+                                        setLocationDrafts((prev) => {
+                                          const copy = { ...prev };
+                                          delete copy[item.id];
+                                          return copy;
+                                        });
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        (e.target as HTMLInputElement).blur();
+                                      }
+                                    }}
+                                    className={`w-full border rounded-md px-2.5 py-1.5 text-sm font-normal transition-colors focus:ring-2 focus:ring-blue-500 ${
+                                      item.deliveryDetailLocation
+                                        ? 'border-blue-300 bg-blue-50/40 text-slate-900'
+                                        : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-500'
+                                    }`}
+                                    title="입력 시 해당 품목/라인의 수령장소를 개별 오버라이드합니다. 비워두면 카테고리/라인 기본값이 자동 적용됩니다."
+                                  />
+                                  {item.deliveryDetailLocation && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLocationDrafts((prev) => {
+                                          const copy = { ...prev };
+                                          delete copy[item.id];
+                                          return copy;
+                                        });
+                                        onUpdateItemDeliveryLocation(item.id, undefined);
+                                      }}
+                                      title={`기본값(${item.defaultDeliveryLocation || '-'})으로 복원`}
+                                      className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded border border-slate-200 transition-colors cursor-pointer shrink-0"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between gap-1 text-xs pl-0.5">
+                                  {item.deliveryDetailLocation ? (
+                                    <span className="inline-flex items-center gap-1 text-blue-700 font-normal">
+                                      <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 text-[11px]">
+                                        품목 개별지정
+                                      </span>
+                                      <span className="text-slate-400 truncate max-w-[145px]" title={`기본값: ${item.defaultDeliveryLocation}`}>
+                                        (기본: {item.defaultDeliveryLocation})
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-slate-500 font-normal">
+                                      <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                                        [{item.line}] 기본값
+                                      </span>
+                                      <span className="text-slate-700 truncate max-w-[165px]">
+                                        {item.defaultDeliveryLocation || item.deliveryLocation}
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm font-normal text-slate-900">
+                                {item.deliveryDetailLocation || item.deliveryLocation || '-'}
+                              </span>
+                            )}
                           </td>
                           <td className="px-3.5 py-3 border-r border-slate-200 text-center font-mono text-sm text-slate-700 font-normal">
                             1{item.packUnit} = {item.unitConversion}{item.baseUnit}
@@ -717,7 +827,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                     <th className="p-3 text-center w-40">발주 기준 방식</th>
                     <th className="p-3 text-center w-40">안전/기준 발주점</th>
                     <th className="p-3 text-center w-40">발주주기 / 권장발주량</th>
-                    <th className="p-3 min-w-[220px]">납품장소 (수기 입력)</th>
+                    <th className="p-3 min-w-[280px]">기본 납품장소 (Default) &amp; 라인별 설정</th>
                     <th className="p-3">설명</th>
                     <th className="p-3 text-center w-24">관리</th>
                   </tr>
@@ -834,18 +944,56 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                         </td>
 
                         <td className="p-2.5">
-                          <input
-                            type="text"
-                            value={cat.deliveryLocation || ''}
-                            placeholder="예: 포승공장 출하1번홈"
-                            onChange={(e) =>
-                              onUpdateCategory({
-                                ...cat,
-                                deliveryLocation: e.target.value,
-                              })
-                            }
-                            className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm text-slate-900 bg-white font-medium focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                          />
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[11px] font-bold shrink-0">
+                                기본(Default)
+                              </span>
+                              <input
+                                type="text"
+                                value={cat.deliveryLocation || ''}
+                                placeholder="예: 포승공장 출하1번홈"
+                                onChange={(e) =>
+                                  onUpdateCategory({
+                                    ...cat,
+                                    deliveryLocation: e.target.value,
+                                  })
+                                }
+                                className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-sm text-slate-900 bg-white font-normal focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
+                              <div className="flex flex-wrap items-center gap-1">
+                                {cat.lineDeliveryLocations &&
+                                Object.keys(cat.lineDeliveryLocations).length > 0 ? (
+                                  (['SL1', 'SL2', '공용', '아산공장'] as const).map((ln) => {
+                                    const locVal = cat.lineDeliveryLocations?.[ln];
+                                    if (!locVal) return null;
+                                    return (
+                                      <span
+                                        key={ln}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-normal"
+                                      >
+                                        <strong className="font-semibold">{ln}:</strong> {locVal}
+                                      </span>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="text-slate-400 text-[11px]">
+                                    라인별 미지정 시 위 기본 납품장소 적용
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setEditingCategory({ ...cat })}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-300 text-[11px] font-semibold transition-colors cursor-pointer shrink-0"
+                              >
+                                <MapPin className="w-3 h-3 text-blue-600" />
+                                <span>라인별 장소 설정</span>
+                              </button>
+                            </div>
+                          </div>
                         </td>
 
                         <td className="p-3 text-slate-600 text-xs">
@@ -1569,7 +1717,7 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  납품장소 (하역위치)
+                  카테고리 기본 납품장소 (Default 하역위치)
                 </label>
                 <input
                   type="text"
@@ -1583,6 +1731,52 @@ export const MasterDataTab: React.FC<MasterDataTabProps> = ({
                   }
                   className="w-full border border-slate-300 rounded-lg p-2.5 bg-white text-slate-900"
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  라인별 장소나 품목별 수령장소가 별도 지정되지 않았을 때 기본으로 적용되는 납품장소입니다.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-800 font-bold text-xs flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span>라인별 기본 수령장소 세분화 설정 (선택)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500">
+                    동일 카테고리 내 라인별 수령장소 분리
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  {(
+                    [
+                      { line: 'SL1', label: '포승 SL1라인', placeholder: '예: 포승공장 SL1라인 작업대' },
+                      { line: 'SL2', label: '포승 SL2라인', placeholder: '예: 포승공장 SL2라인 작업대' },
+                      { line: '공용', label: '포승 공용(포장/출하)', placeholder: '예: 포승공장 출하1번홈' },
+                      { line: '아산공장', label: '아산공장 (SL라인)', placeholder: '예: 아산공장 SL라인 진입부' },
+                    ] as const
+                  ).map(({ line: ln, label, placeholder }) => (
+                    <div key={ln}>
+                      <label className="block text-slate-600 font-semibold mb-1 text-[11px]">
+                        [{ln}] {label}
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={placeholder}
+                        value={editingCategory.lineDeliveryLocations?.[ln] || ''}
+                        onChange={(e) =>
+                          setEditingCategory({
+                            ...editingCategory,
+                            lineDeliveryLocations: {
+                              ...(editingCategory.lineDeliveryLocations || {}),
+                              [ln]: e.target.value,
+                            },
+                          })
+                        }
+                        className="w-full border border-slate-300 rounded-lg p-2 bg-white text-slate-900 text-xs focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div>

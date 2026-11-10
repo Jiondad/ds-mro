@@ -26,6 +26,8 @@ import {
   calculateItemMetrics,
   TODAY_STR,
   compareUserAccountsByAffiliation,
+  resolveEffectiveDeliveryLocation,
+  getDefaultDeliveryLocationForLine,
 } from './utils/calculations';
 import {
   resolveInitialActiveTab,
@@ -763,6 +765,39 @@ export default function App() {
     );
   };
 
+  // [품목 마스터] 품목/라인별 수령장소(하역위치) 개별 지정 및 기본값 복원 핸들러
+  const handleUpdateItemDeliveryLocation = (
+    itemId: string,
+    deliveryDetailLocation: string | undefined
+  ) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
+    const category = categories.find((c) => c.id === targetItem.categoryId);
+    const trimmed = deliveryDetailLocation?.trim() || undefined;
+
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              deliveryDetailLocation: trimmed,
+            }
+          : it
+      )
+    );
+
+    if (trimmed) {
+      showToast(
+        `[${targetItem.line} · ${targetItem.itemName}] 품목 수령장소가 '${trimmed}'(으)로 개별 지정되었습니다.`
+      );
+    } else {
+      const defaultLoc = getDefaultDeliveryLocationForLine(targetItem.line, category);
+      showToast(
+        `[${targetItem.line} · ${targetItem.itemName}] 수령장소가 라인 기본값('${defaultLoc}')으로 복원되었습니다.`
+      );
+    }
+  };
+
   // RBAC-guarded tab navigation
   const handleTabChangeWithRBAC = (nextTab: ActiveTab) => {
     const level = currentUser?.level ?? 0;
@@ -1113,7 +1148,7 @@ export default function App() {
           baseUnit: it.baseUnit,
           unitPrice: it.unitPrice,
           totalAmount,
-          deliveryLocation: category?.deliveryLocation || '포승공장 출하1번홈',
+          deliveryLocation: resolveEffectiveDeliveryLocation(it, category),
           status: '입고대기',
           note: '신규 발주서 발행건',
         });
@@ -1396,7 +1431,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-[1920px] mx-auto px-2.5 sm:px-6 py-3 sm:py-4">
+      <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 sm:px-4 py-3 sm:py-4">
         {activeTab === 'dashboard' && (
           <DashboardTab
             items={calculatedItems}
@@ -1474,6 +1509,7 @@ export default function App() {
             onResetAllData={handleResetAllData}
             userAccounts={userAccounts}
             onAssignItemReceiver={handleAssignItemReceiver}
+            onUpdateItemDeliveryLocation={handleUpdateItemDeliveryLocation}
           />
         )}
 

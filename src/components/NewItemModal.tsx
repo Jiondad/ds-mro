@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Category, InventoryItem, ProductionLine, Unit, UserAccount, Vendor } from '../types';
-import { X, Plus, AlertCircle, Package } from 'lucide-react';
+import { getDefaultDeliveryLocationForLine } from '../utils/calculations';
+import { X, Plus, AlertCircle, Package, RotateCcw, MapPin } from 'lucide-react';
 
 interface NewItemModalProps {
   isOpen: boolean;
@@ -549,17 +550,88 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1 text-xs">
-                  세부 하역장소 (개별 오버라이드)
-                </label>
+              <div className="sm:col-span-3 pt-1 border-t border-slate-200/80">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <label className="text-slate-800 font-bold text-xs flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span>품목/라인별 수령장소 (개별 지정 오버라이드)</span>
+                    {deliveryDetailLocation.trim() ? (
+                      <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                        개별 지정됨
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-semibold">
+                        카테고리·라인 기본값 자동 적용
+                      </span>
+                    )}
+                  </label>
+                  {deliveryDetailLocation.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryDetailLocation('')}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-white border border-slate-300 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>기본값으로 복원</span>
+                    </button>
+                  )}
+                </div>
+
                 <input
                   type="text"
-                  placeholder={selectedCategory?.deliveryLocation || '예: SL1 작업대 1번'}
+                  placeholder={`미입력 시 [${line}] 기본값 자동 적용: ${getDefaultDeliveryLocationForLine(
+                    line,
+                    selectedCategory
+                  )}`}
                   value={deliveryDetailLocation}
                   onChange={(e) => setDeliveryDetailLocation(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-500"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 font-normal"
                 />
+
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <span className="text-slate-500">
+                    현재 [{line}] 기본 수령장소:{' '}
+                    <strong className="text-slate-800 font-medium">
+                      {getDefaultDeliveryLocationForLine(line, selectedCategory)}
+                    </strong>
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="text-slate-400 mr-0.5">빠른 지정:</span>
+                    {(line === '아산공장'
+                      ? [
+                          '아산공장 SL라인 진입부',
+                          '아산공장 SL라인 세척패드 보관대',
+                          '아산공장 출하장 목재야적장',
+                        ]
+                      : line === 'SL1'
+                      ? [
+                          '포승공장 SL1라인 작업대 (1번 랙)',
+                          '포승공장 SL1라인 결속구간',
+                          '포승공장 SL1라인 출측 적치장',
+                        ]
+                      : line === 'SL2'
+                      ? [
+                          '포승공장 SL2라인 작업대 (2번 랙)',
+                          '포승공장 SL2라인 결속구간',
+                          '포승공장 SL2라인 출측 적치장',
+                        ]
+                      : [
+                          '포승공장 출하1번홈 (목재야적장)',
+                          '포승공장 포장장 결속대 (도크 2번)',
+                          '공용포장장 부자재실 (선반 3번)',
+                        ]
+                    ).map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setDeliveryDetailLocation(preset)}
+                        className="px-2 py-0.5 rounded bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-300 text-[10px] transition-colors cursor-pointer"
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

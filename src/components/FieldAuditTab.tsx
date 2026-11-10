@@ -804,10 +804,18 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5 leading-snug flex items-center gap-1.5">
+                        <div className="text-xs text-slate-500 mt-0.5 leading-snug flex flex-wrap items-center gap-1.5">
                           <span className="text-slate-700">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
                           <span className="font-mono text-slate-500">1{item.packUnit} = {item.unitConversion}{item.baseUnit}</span>
+                          {item.deliveryLocation && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-slate-600">
+                                수령장소: {item.deliveryDetailLocation || item.deliveryLocation}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </td>
 
@@ -1104,14 +1112,26 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
                   {/* Card Middle: Item Name + Spec */}
                   <div className="py-1">
-                    <div className="text-base font-medium text-slate-900 leading-snug">
+                    <div className="text-base font-normal text-slate-900 leading-snug">
                       {item.itemName} {item.spec}
                     </div>
-                    {item.purpose && (
-                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
-                        {item.purpose}
-                      </p>
-                    )}
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span>
+                        수령장소: {item.deliveryDetailLocation || item.deliveryLocation || '-'}
+                      </span>
+                      {item.receiverName && (
+                        <>
+                          <span>·</span>
+                          <span>수령담당: {item.receiverName}</span>
+                        </>
+                      )}
+                      {item.purpose && (
+                        <>
+                          <span>·</span>
+                          <span className="line-clamp-1">{item.purpose}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {/* Converted Stock & Remaining Days Metrics Strip */}
@@ -1326,6 +1346,22 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                   <span className="ml-2 text-xs font-normal text-slate-600 font-mono">
                     {confirmModalData.item.spec}
                   </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-slate-600 border-t border-slate-200/80">
+                  <span>
+                    수령장소:{' '}
+                    <strong className="text-slate-800">
+                      [{confirmModalData.item.line}]{' '}
+                      {confirmModalData.item.deliveryDetailLocation ||
+                        confirmModalData.item.deliveryLocation ||
+                        '-'}
+                    </strong>
+                  </span>
+                  {confirmModalData.item.receiverName && (
+                    <span>
+                      · 수령담당: <strong className="text-slate-800">{confirmModalData.item.receiverName}</strong>
+                    </span>
+                  )}
                 </div>
               </div>
 

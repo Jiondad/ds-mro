@@ -375,18 +375,23 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
         ? activeProfile.asanDefaultReceiver
         : activeProfile.poseungDefaultReceiver;
 
+    const uniqueLines = Array.from(new Set(itemsToOrder.map((it) => it.line)));
     const deliveryLocations = Array.from(
       new Set(
         itemsToOrder
-          .map((it) => it.deliveryDetailLocation || it.deliveryLocation)
+          .map((it) => {
+            const loc = it.deliveryDetailLocation || it.deliveryLocation;
+            if (!loc) return '';
+            return uniqueLines.length > 1 ? `[${it.line}] ${loc}` : loc;
+          })
           .filter(Boolean)
       )
     );
     const deliveryLocationText =
       deliveryLocations.length > 0
-        ? deliveryLocations.join(', ')
+        ? deliveryLocations.join(' / ')
         : hasAsan && !hasPoseung
-        ? '아산공장 SL라인'
+        ? '아산공장 SL라인 진입부'
         : '포승공장 출하1번홈 (공용포장장)';
 
     const noteLines = activeProfile.defaultOrderNote
@@ -987,11 +992,27 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                               </span>
                             </td>
                             <td className="p-3">
-                              <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
+                              <div className="text-sm sm:text-base font-normal text-slate-900 leading-snug">
                                 {`${item.itemName} ${item.spec}`}
                               </div>
-                              <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 leading-snug">
-                                <span>용도: {item.purpose || item.moqDescription}</span>
+                              <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5 leading-snug">
+                                <span className="inline-flex items-center gap-1 text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">
+                                  <MapPin className="w-3 h-3 text-blue-600 shrink-0" />
+                                  <span>
+                                    수령장소: {item.deliveryDetailLocation || item.deliveryLocation}
+                                  </span>
+                                  {item.isCustomDeliveryLocation && (
+                                    <span className="text-[10px] text-blue-700 font-semibold">
+                                      (개별지정)
+                                    </span>
+                                  )}
+                                </span>
+                                {item.receiverName && (
+                                  <span className="text-slate-600">
+                                    · 수령: {item.receiverName}
+                                  </span>
+                                )}
+                                <span>· 용도: {item.purpose || item.moqDescription}</span>
                                 {item.isQtyBased && (
                                   <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
                                     수량기준 ({item.triggerPackQty}{item.packUnit}↓)
@@ -1141,10 +1162,14 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
 
                         {/* Middle: Item Name + Spec */}
                         <div className="pl-6 py-1">
-                          <div className="text-sm font-medium text-slate-900 leading-snug">
+                          <div className="text-sm font-normal text-slate-900 leading-snug">
                             {item.itemName} {item.spec}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span className="text-slate-700">
+                              수령장소: {item.deliveryDetailLocation || item.deliveryLocation}
+                            </span>
+                            <span>·</span>
                             <span>
                               현재고:{' '}
                               <strong className="font-mono text-slate-700">

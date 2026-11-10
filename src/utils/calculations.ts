@@ -98,6 +98,11 @@ export function calculateItemMetrics(
   // 주간실사 지연 판정 (7일 이상 경과 또는 미실사 품목 경고)
   const { isAuditDelayed, daysSinceLastAudit } = calculateAuditDelay(item.lastAuditDate);
 
+  const defaultDeliveryLocation = getDefaultDeliveryLocationForLine(item.line, category);
+  const customLoc = item.deliveryDetailLocation?.trim();
+  const isCustomDeliveryLocation = Boolean(customLoc);
+  const effectiveDeliveryLocation = customLoc || defaultDeliveryLocation;
+
   return {
     ...item,
     currentBaseStock,
@@ -117,17 +122,78 @@ export function calculateItemMetrics(
     triggerPackQty,
     triggerBaseQty,
     fixedOrderPackQty,
-    deliveryLocation:
-      item.deliveryDetailLocation ||
-      category?.deliveryLocation ||
-      (isAsanLine(item.line) ? '아산공장 SL라인 진입부' : '포승공장 출하1번홈 (공용포장장)'),
+    deliveryLocation: effectiveDeliveryLocation,
+    defaultDeliveryLocation,
+    isCustomDeliveryLocation,
     receiverLoginId: item.receiverLoginId,
     receiverName: item.receiverName,
     receiverPhone: item.receiverPhone,
-    deliveryDetailLocation: item.deliveryDetailLocation,
+    deliveryDetailLocation: customLoc || undefined,
     isAuditDelayed,
     daysSinceLastAudit,
   };
+}
+
+/**
+ * 라인 및 카테고리 설정에 따른 기본(Default) 수령장소 반환
+ * 1순위: 카테고리에 설정된 라인별 기본 수령장소 (`category.lineDeliveryLocations[line]`)
+ * 2순위: 카테고리의 기본 납품장소 (`category.deliveryLocation`) — 단, 라인(SL1, SL2, 아산공장)에 맞춰 자동 정교화
+ * 3순위: 라인별 표준 기본 하역장소
+ */
+export function getDefaultDeliveryLocationForLine(
+  line: string,
+  category?: Category
+): string {
+  const normLine = normalizeLineName(line) as 'SL1' | 'SL2' | '공용' | '아산공장';
+
+  // 1. 카테고리 내 라인별 지정 납품장소가 있으면 최우선 적용
+  const lineSpecific =
+    category?.lineDeliveryLocations?.[normLine]?.trim() ||
+    category?.lineDeliveryLocations?.[line as keyof NonNullable<Category['lineDeliveryLocations']>]?.trim();
+  if (lineSpecific) {
+    return lineSpecific;
+  }
+
+  // 2. 카테고리 기본 납품장소(Default)가 있는 경우
+  const catDefault = category?.deliveryLocation?.trim();
+  if (catDefault) {
+    // 아산공장 배정 품목인데 카테고리 기본값이 포승공장 전용 문구인 경우 아산공장 기본 위치로 자동 보정
+    if (isAsanLine(line) && catDefault.includes('포승') && !catDefault.includes('아산')) {
+      return `아산공장 SL라인 (${category?.name || '현장'} 하역장)`;
+    }
+    // 포승공장 배정 품목인데 카테고리 기본값이 아산공장 전용 문구인 경우 포승 라인 위치로 자동 보정
+    if (isPoseungLine(line) && catDefault.includes('아산') && !catDefault.includes('포승')) {
+      if (normLine === 'SL1') return '포승공장 SL1라인 작업대';
+      if (normLine === 'SL2') return '포승공장 SL2라인 작업대';
+      return '포승공장 출하1번홈 (공용포장장)';
+    }
+    // 카테고리 기본값이 'SL1/SL2' 공용 표기일 때 품목이 SL1 또는 SL2로 배정된 경우 해당 라인명으로 구체화
+    if (catDefault.includes('SL1/SL2')) {
+      if (normLine === 'SL1') return catDefault.replace('SL1/SL2', 'SL1라인');
+      if (normLine === 'SL2') return catDefault.replace('SL1/SL2', 'SL2라인');
+    }
+    return catDefault;
+  }
+
+  // 3. 라인별 기본값 폴백
+  if (isAsanLine(line)) return '아산공장 SL라인 진입부';
+  if (normLine === 'SL1') return '포승공장 SL1라인 작업대';
+  if (normLine === 'SL2') return '포승공장 SL2라인 작업대';
+  return '포승공장 출하1번홈 (공용포장장)';
+}
+
+/**
+ * 품목의 최종 유효 수령장소(납품장소) 계산
+ * - 품목 개별 지정(deliveryDetailLocation)이 있으면 최우선 적용 (오버라이드)
+ * - 없으면 카테고리/라인 기본 수령장소(getDefaultDeliveryLocationForLine) 반환
+ */
+export function resolveEffectiveDeliveryLocation(
+  item: Pick<InventoryItem, 'line' | 'deliveryDetailLocation'>,
+  category?: Category
+): string {
+  const custom = item.deliveryDetailLocation?.trim();
+  if (custom) return custom;
+  return getDefaultDeliveryLocationForLine(item.line, category);
 }
 
 export const AUDIT_DELAY_THRESHOLD_DAYS = 7;

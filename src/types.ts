@@ -34,7 +34,8 @@ export interface Category {
   defaultTriggerPackQty?: number; // 수량 기준일 때 기본값: 발주 기준 포장수량 (예: 5박스, 3코일 이하 시 발주)
   defaultOrderPackQty?: number; // 수량 기준일 때 기본값: 1회 고정 발주 포장수량 (예: 10박스, 20코일 발주)
   description?: string;
-  deliveryLocation?: string; // 카테고리별 납품장소 (예: "포승공장 출하1번홈", "아산공장 SL2라인", "입고2번 창고")
+  deliveryLocation?: string; // 카테고리별 기본(Default) 납품장소 (예: "포승공장 출하1번홈", "아산공장 SL2라인", "입고2번 창고")
+  lineDeliveryLocations?: Partial<Record<ProductionLine, string>>; // 동일 카테고리 내 라인별(SL1, SL2, 공용, 아산공장) 기본 수령장소 오버라이드
 }
 
 export interface Unit {
@@ -81,7 +82,7 @@ export interface InventoryItem {
   receiverLoginId?: string; // 품목별 현장 수령 담당자 로그인 아이디 (자동으로 LV.1 현장사용자 권한 부여)
   receiverName?: string; // 품목별 현장 수령 담당자명/직급 (예: '박현장 반장', '이아산 기장')
   receiverPhone?: string; // 품목별 현장 수령 담당자 연락처 (예: '010-8899-7721')
-  deliveryDetailLocation?: string; // 품목별 세부 하역장소 오버라이드 (미입력 시 카테고리 납품장소 사용)
+  deliveryDetailLocation?: string; // 품목별 세부 하역장소 오버라이드 (미입력 시 카테고리/라인 기본 납품장소 사용)
 }
 
 export interface CalculatedItem extends InventoryItem {
@@ -102,7 +103,9 @@ export interface CalculatedItem extends InventoryItem {
   triggerPackQty: number; // 적용된 발주점 포장수량
   triggerBaseQty: number; // 적용된 발주점 기본수량
   fixedOrderPackQty: number; // 적용된 1회 고정발주 포장수량
-  deliveryLocation?: string; // 카테고리에서 상속된 납품장소 (또는 품목 세부 하역장소)
+  deliveryLocation?: string; // 최종 적용된 납품장소 (품목 개별 지정 > 카테고리 라인별 기본값 > 카테고리 기본값)
+  defaultDeliveryLocation?: string; // 카테고리 및 배정 라인 기준 기본(Default) 납품장소
+  isCustomDeliveryLocation?: boolean; // 품목 마스터에서 수령장소를 개별 오버라이드했는지 여부
   receiverLoginId?: string;
   receiverName?: string;
   receiverPhone?: string;

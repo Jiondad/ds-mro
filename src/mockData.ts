@@ -158,6 +158,12 @@ export const INITIAL_CATEGORIES: Category[] = [
     defaultTriggerPackQty: 5,
     defaultOrderPackQty: 10,
     deliveryLocation: '포승공장 SL1/SL2 작업대',
+    lineDeliveryLocations: {
+      SL1: '포승공장 SL1라인 작업대 (1번 랙)',
+      SL2: '포승공장 SL2라인 작업대 (2번 랙)',
+      공용: '포승공장 공용포장장 부자재실',
+      아산공장: '아산공장 SL라인 세척패드 보관대',
+    },
     description: '코일 표면 스크래치 방지 및 세척 펠트 패드',
   },
   {
@@ -169,6 +175,12 @@ export const INITIAL_CATEGORIES: Category[] = [
     defaultTriggerPackQty: 10,
     defaultOrderPackQty: 20,
     deliveryLocation: '포승공장 출하1번홈 (목재야적장)',
+    lineDeliveryLocations: {
+      SL1: '포승공장 SL1라인 출측 목재적치장',
+      SL2: '포승공장 SL2라인 출측 목재적치장',
+      공용: '포승공장 출하1번홈 (목재야적장)',
+      아산공장: '아산공장 출하장 목재야적장',
+    },
     description: '내수 및 수출용 코일 받침 목재 (홈가공/방역)',
   },
   {
@@ -180,6 +192,12 @@ export const INITIAL_CATEGORIES: Category[] = [
     defaultTriggerPackQty: 5,
     defaultOrderPackQty: 10,
     deliveryLocation: '포승공장 포장장 결속대 (도크 2번)',
+    lineDeliveryLocations: {
+      SL1: '포승공장 SL1라인 결속구간',
+      SL2: '포승공장 SL2라인 결속구간',
+      공용: '포승공장 포장장 결속대 (도크 2번)',
+      아산공장: '아산공장 SL라인 결속대',
+    },
     description: '코일 원형 결속용 고장력 강대 (Blue 코팅)',
   },
   {
@@ -191,6 +209,12 @@ export const INITIAL_CATEGORIES: Category[] = [
     defaultTriggerPackQty: 4,
     defaultOrderPackQty: 10,
     deliveryLocation: '공용포장장 부자재실 (선반 3번)',
+    lineDeliveryLocations: {
+      SL1: '포승공장 SL1라인 부자재함',
+      SL2: '포승공장 SL2라인 부자재함',
+      공용: '공용포장장 부자재실 (선반 3번)',
+      아산공장: '아산공장 SL라인 부자재실',
+    },
     description: '강대 결속용 씰클립 및 점착 테이프류',
   },
   {
@@ -202,6 +226,10 @@ export const INITIAL_CATEGORIES: Category[] = [
     defaultTriggerPackQty: 3,
     defaultOrderPackQty: 8,
     deliveryLocation: '목재 파렛트 제작장 (작업대 A)',
+    lineDeliveryLocations: {
+      공용: '목재 파렛트 제작장 (작업대 A)',
+      아산공장: '아산공장 파렛트 보수작업대',
+    },
     description: '목재 파렛트 조립용 타카 에어못',
   },
   {

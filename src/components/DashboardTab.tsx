@@ -560,104 +560,94 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
         {/* High-Density Spreadsheet Table (Desktop: lg+) */}
         <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-sm text-left border-collapse table-auto">
+          <table className="w-full text-xs sm:text-sm text-left border-collapse table-auto">
             <thead>
-              <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 select-none text-sm">
+              <tr className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 select-none text-xs tracking-tight">
                 {/* 1. 라인 */}
                 <th
                   onClick={() => handleSortToggle('line')}
-                  className="px-3 py-3 border-r border-slate-200 text-center cursor-pointer hover:bg-slate-200 whitespace-nowrap w-16"
+                  className="px-1.5 py-2 border-r border-slate-200 text-center cursor-pointer hover:bg-slate-200 whitespace-nowrap w-12"
                 >
-                  <div className="flex items-center justify-center gap-1">
+                  <div className="flex items-center justify-center gap-0.5">
                     <span>라인</span>
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 shrink-0" />
                   </div>
                 </th>
 
-                {/* 2. 카테고리 (신규 독립 컬럼) */}
-                <th className="px-3 py-3 border-r border-slate-200 text-left whitespace-nowrap min-w-[120px]">
+                {/* 2. 카테고리 */}
+                <th className="px-2 py-2 border-r border-slate-200 text-left whitespace-nowrap w-24">
                   카테고리
                 </th>
 
                 {/* 3. 품목명 (규격 / 거래처) */}
                 <th
                   onClick={() => handleSortToggle('itemName')}
-                  className="px-3 py-3 border-r border-slate-200 cursor-pointer hover:bg-slate-200 whitespace-nowrap min-w-[220px]"
+                  className="px-2.5 py-2 border-r border-slate-200 cursor-pointer hover:bg-slate-200 whitespace-nowrap"
                 >
                   <div className="flex items-center gap-1">
-                    <span>품목명 (규격 / 거래처)</span>
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                    <span>품목명 (규격 / 거래처·수령장소)</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 shrink-0" />
                   </div>
                 </th>
 
                 {/* 4. 실사재고(포장) */}
-                <th className="px-3 py-3 border-r border-slate-200 text-right bg-yellow-50 text-yellow-900 whitespace-nowrap w-28">
-                  실사재고(포장)
+                <th className="px-2 py-2 border-r border-slate-200 text-right bg-yellow-50 text-yellow-900 whitespace-nowrap w-22">
+                  실사재고
                 </th>
 
                 {/* 5. 환산재고 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap w-24">
+                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-20">
                   환산재고
                 </th>
 
                 {/* 6. 일사용량 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap w-24">
+                <th className="px-1.5 py-2 border-r border-slate-200 text-right whitespace-nowrap w-16">
                   일사용량
                 </th>
 
                 {/* 7. 잔여일 */}
                 <th
                   onClick={() => handleSortToggle('remainingDays')}
-                  className="px-3 py-3 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-200 whitespace-nowrap w-24"
+                  className="px-1.5 py-2 border-r border-slate-200 text-right cursor-pointer hover:bg-slate-200 whitespace-nowrap w-16"
                 >
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-0.5">
                     <span>잔여일</span>
-                    <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                    <ArrowUpDown className="w-3 h-3 text-slate-400 shrink-0" />
                   </div>
                 </th>
 
                 {/* 8. 안전/기준재고 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap min-w-[110px]">
-                  안전/기준재고
+                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-22">
+                  안전/기준
                 </th>
 
-                {/* 9. 발주 (필요 여부) */}
-                <th className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap w-20">
-                  발주
+                {/* 9. 발주(포장·단위) - 입고단위와 발주(포장) 통합 압축 */}
+                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-22">
+                  발주(포장·단위)
                 </th>
 
-                {/* 10. 입고단위 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap w-28">
-                  입고단위
-                </th>
-
-                {/* 11. 발주(포장) */}
-                <th className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap w-24">
-                  발주(포장)
-                </th>
-
-                {/* 12. 발주(환산) */}
-                <th className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap w-24">
+                {/* 10. 발주(환산) */}
+                <th className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap w-20">
                   발주(환산)
                 </th>
 
-                {/* 13. 상태 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap w-28">
-                  상태
+                {/* 11. 발주·상태 (발주 신호등 + 진행상태 통합) */}
+                <th className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap w-18">
+                  발주·상태
                 </th>
 
-                {/* 14. 발주/입고예정 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap min-w-[230px]">
+                {/* 12. 발주/입고예정 */}
+                <th className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap w-40">
                   발주/입고예정
                 </th>
 
-                {/* 15. 최근발주 */}
-                <th className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap w-24">
+                {/* 13. 최근발주 */}
+                <th className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap w-16">
                   최근발주
                 </th>
 
-                {/* 16. 관리 */}
-                <th className="px-3 py-3 text-center whitespace-nowrap w-20">
+                {/* 14. 관리 */}
+                <th className="px-1.5 py-2 text-center whitespace-nowrap w-14">
                   관리
                 </th>
               </tr>
@@ -665,7 +655,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             <tbody className="divide-y divide-slate-200 font-medium text-sm">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-slate-400 whitespace-nowrap">
+                  <td colSpan={14} className="py-12 text-center text-slate-400 whitespace-nowrap">
                     <p className="text-base font-semibold">해당 조건의 소모품이 없습니다.</p>
                     <p className="text-sm mt-1">필터를 해제하거나 검색어를 변경해주세요.</p>
                   </td>
@@ -688,101 +678,115 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                           : ''
                       }`}
                     >
-                      {/* 1. 라인: 박스 배지 제거, 굵은 텍스트, '공용'으로 축약 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap">
-                        <span className={`${getLineTextColor(item.line)} text-sm`}>
+                      {/* 1. 라인 */}
+                      <td className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                        <span className={`${getLineTextColor(item.line)} text-xs sm:text-sm`}>
                           {getLineShortLabel(item.line)}
                         </span>
                       </td>
 
-                      {/* 2. 카테고리 (신규 독립 컬럼) */}
-                      <td className="px-3 py-3 border-r border-slate-200 whitespace-nowrap">
-                        <span className="font-medium text-slate-800 text-sm">
+                      {/* 2. 카테고리 */}
+                      <td className="px-2 py-2 border-r border-slate-200 whitespace-nowrap">
+                        <span className="font-medium text-slate-800 text-xs block truncate max-w-[96px]" title={item.categoryName}>
                           {item.categoryName}
                         </span>
                       </td>
 
-                      {/* 3. 품목명(규격 / 거래처): 볼드 해제 및 주변 텍스트와 동일한 선명한 기본 두께(font-medium) 유지 */}
-                      <td className="px-3 py-3 border-r border-slate-200 whitespace-nowrap">
-                        <div className="text-sm sm:text-base font-medium text-slate-900 leading-snug">
-                          {`${item.itemName} ${item.spec}`}
+                      {/* 3. 품목명(규격 / 거래처·수령장소): 일반 두께(font-normal) 및 서브 텍스트 밀착 */}
+                      <td className="px-2.5 py-2 border-r border-slate-200 max-w-[230px]">
+                        <div
+                          className="text-sm font-normal text-slate-900 leading-tight truncate"
+                          title={`${item.itemName} ${item.spec}`}
+                        >
+                          <span>{item.itemName}</span>{' '}
+                          <span className="text-xs text-slate-600 font-mono">{item.spec}</span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5 leading-snug flex items-center gap-1.5">
-                          <span className="text-slate-700">{item.vendorName}</span>
+                        <div
+                          className="text-[11px] text-slate-500 mt-0.5 leading-tight flex items-center gap-1 truncate"
+                          title={`${item.vendorName} · 주기 ${category?.orderCycleDays || 30}일${
+                            item.deliveryLocation ? ` · ${item.deliveryLocation}` : ''
+                          }`}
+                        >
+                          <span className="text-slate-700 shrink-0">{item.vendorName}</span>
                           <span className="text-slate-300">·</span>
-                          <span className="text-slate-500">주기 {category?.orderCycleDays || 30}일</span>
-                          {item.purpose && (
+                          <span className="text-slate-500 shrink-0">
+                            {category?.orderCycleDays || 30}일
+                          </span>
+                          {item.deliveryLocation && (
                             <>
                               <span className="text-slate-300">·</span>
-                              <span className="text-slate-500 truncate max-w-[140px]">{item.purpose}</span>
+                              <span className="text-slate-500 truncate">
+                                {item.deliveryLocation}
+                              </span>
                             </>
                           )}
                         </div>
                       </td>
 
-                      {/* 4. 실사재고(포장): 은은한 노란색 배경의 읽기 전용 텍스트 + 실사지연 배지 */}
-                      <td className="px-3 py-3 border-r border-slate-200 bg-amber-50/60 text-right whitespace-nowrap">
-                        <div className="inline-flex items-baseline justify-end gap-1">
-                          <span className="font-extrabold font-mono text-base text-slate-900">
+                      {/* 4. 실사재고(포장) */}
+                      <td className="px-2 py-2 border-r border-slate-200 bg-amber-50/60 text-right whitespace-nowrap">
+                        <div className="inline-flex items-baseline justify-end gap-0.5 leading-tight">
+                          <span className="font-extrabold font-mono text-sm text-slate-900">
                             {formatNumber(item.currentPackStock)}
                           </span>
-                          <span className="text-xs text-slate-600 font-bold w-8 text-left shrink-0">
+                          <span className="text-[11px] text-slate-600 font-bold">
                             {item.packUnit}
                           </span>
                         </div>
                         {item.isAuditDelayed ? (
-                          <div className="mt-1">
+                          <div className="mt-0.5 leading-none">
                             <span
                               onClick={() => onNavigateToFieldAudit && onNavigateToFieldAudit()}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[11px] cursor-pointer hover:bg-amber-400"
+                              className="inline-flex items-center px-1 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[10px] cursor-pointer hover:bg-amber-400"
                               title="실사가 지연되었거나 누락된 품목입니다. 클릭하여 실사 화면으로 이동"
                             >
-                              ⚠️{' '}
+                              ⚠️
                               {item.daysSinceLastAudit !== null
-                                ? `실사지연 (${item.daysSinceLastAudit}일경과)`
+                                ? `지연(${item.daysSinceLastAudit}일)`
                                 : '실사누락'}
                             </span>
                           </div>
                         ) : item.lastAuditDate ? (
-                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                            {item.lastAuditDate.replace(TODAY_STR + ' ', '')}
+                          <div className="text-[10px] text-slate-500 font-mono leading-tight mt-0.5">
+                            {item.lastAuditDate
+                              .replace(TODAY_STR + ' ', '')
+                              .replace(' 실사확정', '')
+                              .replace(' 입고확정', '')}
                           </div>
                         ) : null}
                       </td>
 
-                      {/* 5. 환산재고: 파란색 굵은 텍스트 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap">
-                        <span className="font-extrabold text-blue-700 font-mono text-base">
+                      {/* 5. 환산재고 */}
+                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                        <span className="font-extrabold text-blue-700 font-mono text-sm">
                           {formatNumber(item.currentBaseStock)}
                         </span>
-                        <span className="text-xs text-slate-500 ml-1">
+                        <span className="text-[11px] text-slate-500 ml-0.5">
                           {item.baseUnit}
                         </span>
                       </td>
 
-                      {/* 6. 일사용량: 읽기 전용 텍스트 (수량기준 미입력 시 - 표시) */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap">
+                      {/* 6. 일사용량 */}
+                      <td className="px-1.5 py-2 border-r border-slate-200 text-right whitespace-nowrap">
                         {item.isQtyBased && item.dailyUsage === 0 ? (
-                          <span className="text-slate-400 font-mono text-xs">- (수량기준)</span>
+                          <span className="text-slate-400 font-mono text-[11px]">- (수량)</span>
                         ) : (
                           <>
-                            <span className="font-bold font-mono text-slate-800 text-sm">
+                            <span className="font-bold font-mono text-slate-800 text-xs">
                               {formatNumber(item.dailyUsage)}
                             </span>
-                            <span className="text-xs text-slate-500 ml-0.5">
-                              /일
-                            </span>
+                            <span className="text-[10px] text-slate-500">/일</span>
                           </>
                         )}
                       </td>
 
-                      {/* 7. 잔여일: 수량기준 미입력 시 - 표시, 그 외 3단계 색상 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap">
+                      {/* 7. 잔여일 */}
+                      <td className="px-1.5 py-2 border-r border-slate-200 text-right whitespace-nowrap">
                         {item.isQtyBased && item.dailyUsage === 0 ? (
-                          <span className="text-slate-400 font-mono text-xs">- (수량기준)</span>
+                          <span className="text-slate-400 font-mono text-[11px]">-</span>
                         ) : (
                           <span
-                            className={`font-black font-mono text-base ${
+                            className={`font-black font-mono text-sm ${
                               item.needsOrder
                                 ? 'text-rose-600'
                                 : item.isOrderImminent
@@ -792,81 +796,60 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                           >
                             {item.remainingDays === 999
                               ? '999일+'
-                              : `${item.remainingDays.toFixed(2)}일`}
+                              : `${item.remainingDays.toFixed(1)}일`}
                           </span>
                         )}
                       </td>
 
-                      {/* 8. 안전/기준재고: 일수 기준 vs 수량(고정) 기준 분기 표기 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap">
+                      {/* 8. 안전/기준재고 */}
+                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
                         {item.isQtyBased ? (
                           <div className="flex flex-col items-end leading-tight">
-                            <div className="inline-flex items-center gap-1 font-mono font-bold text-emerald-800 text-sm">
-                              <span>
-                                {item.triggerPackQty} {item.packUnit} 이하
-                              </span>
-                              <span className="text-[11px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded whitespace-nowrap">
-                                수량기준
-                              </span>
-                            </div>
-                            <span className="text-xs text-slate-500 font-mono mt-0.5">
-                              ({formatNumber(item.triggerBaseQty)} {item.baseUnit})
+                            <span className="font-mono font-bold text-emerald-800 text-xs">
+                              {item.triggerPackQty}
+                              {item.packUnit} 이하
+                            </span>
+                            <span className="text-[10px] text-emerald-700 font-mono">
+                              수량({formatNumber(item.triggerBaseQty)}
+                              {item.baseUnit})
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-end leading-tight">
-                            <span className="font-mono font-bold text-slate-800 text-sm">
+                            <span className="font-mono font-bold text-slate-800 text-xs">
                               {formatNumber(item.safetyStockBase)} {item.baseUnit}
                             </span>
-                            <span className="text-xs text-slate-500 font-mono mt-0.5">
-                              (안전 {category?.safetyDays || 10}일)
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              안전 {category?.safetyDays || 10}일
                             </span>
                           </div>
                         )}
                       </td>
 
-                      {/* 9. 발주: 3단계 신호등 (필요-빨강 / 임박-주황 / 여유-회색-) */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap">
-                        {isAwaiting ? (
-                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-sky-100 text-sky-900 font-bold text-xs border border-sky-300">
-                            진행중
+                      {/* 9. 발주(포장·단위) - 발주 포장수량과 입고단위 환산 통합 */}
+                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
+                        <div className="leading-tight">
+                          <span className="font-extrabold text-slate-900 font-mono text-sm">
+                            {formatNumber(item.recommendedPackOrderQty)}
                           </span>
-                        ) : item.orderUrgency === 'urgent' ? (
-                          <span className="inline-block whitespace-nowrap px-2.5 py-0.5 rounded bg-rose-600 text-white font-extrabold text-xs shadow-xs">
-                            필요
+                          <span className="text-[11px] text-slate-600 font-semibold ml-0.5">
+                            {item.packUnit}
                           </span>
-                        ) : item.orderUrgency === 'warning' ? (
-                          <span className="inline-block whitespace-nowrap px-2.5 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-xs shadow-xs">
-                            임박
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 text-sm font-mono">-</span>
-                        )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono leading-tight mt-0.5">
+                          1{item.packUnit}={formatNumber(item.unitConversion)}
+                          {item.baseUnit}
+                        </div>
                       </td>
 
-                      {/* 10. 입고단위: 한 줄 표기 (예: 20 EA/다발) */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-center text-slate-600 font-mono text-xs whitespace-nowrap">
-                        {formatNumber(item.unitConversion)} {item.baseUnit}/{item.packUnit}
-                      </td>
-
-                      {/* 11. 발주(포장) */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap">
-                        <span className="font-extrabold text-slate-900 font-mono text-base">
-                          {formatNumber(item.recommendedPackOrderQty)}
-                        </span>
-                        <span className="text-xs text-slate-500 ml-1">
-                          {item.packUnit}
-                        </span>
-                      </td>
-
-                      {/* 12. 발주(환산): 발주 필요 시 연분홍, 발주 임박 시 연노랑/주황 배경 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-right whitespace-nowrap">
+                      {/* 10. 발주(환산) */}
+                      <td className="px-2 py-2 border-r border-slate-200 text-right whitespace-nowrap">
                         <span
-                          className={`font-mono text-sm ${
+                          className={`font-mono text-xs ${
                             item.needsOrder
-                              ? 'text-rose-600 font-extrabold bg-rose-50 px-2 py-0.5 rounded border border-rose-200'
+                              ? 'text-rose-600 font-extrabold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200'
                               : item.isOrderImminent
-                              ? 'text-amber-900 font-extrabold bg-amber-50 px-2 py-0.5 rounded border border-amber-200'
+                              ? 'text-amber-900 font-extrabold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200'
                               : 'text-slate-700 font-semibold'
                           }`}
                         >
@@ -874,36 +857,44 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         </span>
                       </td>
 
-                      {/* 13. 상태: 임의 변경 방지 정적 배지 (읽기 전용) */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap">
+                      {/* 11. 발주·상태 (신호등 + 진행상태 통합) */}
+                      <td className="px-1.5 py-2 border-r border-slate-200 text-center whitespace-nowrap">
                         {isAwaiting ? (
-                          <span className="inline-block whitespace-nowrap px-2.5 py-1 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-xs">
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[11px]">
                             입고대기
                           </span>
+                        ) : item.orderUrgency === 'urgent' ? (
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-rose-600 text-white font-extrabold text-[11px] shadow-2xs">
+                            발주필요
+                          </span>
+                        ) : item.orderUrgency === 'warning' ? (
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-extrabold text-[11px] shadow-2xs">
+                            발주임박
+                          </span>
                         ) : (
-                          <span className="inline-block whitespace-nowrap px-2.5 py-1 rounded bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-xs">
+                          <span className="inline-block whitespace-nowrap px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-medium text-[11px]">
                             발주대기
                           </span>
                         )}
                       </td>
 
-                      {/* 14. 발주/입고예정: 현장 작업자 모드에서는 읽기 전용 + 입고확정 이동 버튼 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-center whitespace-nowrap">
+                      {/* 12. 발주/입고예정 */}
+                      <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap">
                         {isAwaiting ? (
-                          <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1 whitespace-nowrap">
                             <div
-                              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-md bg-sky-50 border border-sky-200 shadow-2xs"
+                              className="inline-flex items-center justify-center gap-1 whitespace-nowrap px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200"
                               title={`발주일: ${item.orderDate || item.lastOrderDate || '-'} / 입고예정: ${item.expectedArrivalDate || '-'} (${item.dDayText})`}
                             >
-                              <span className="text-xs font-medium text-slate-700">
-                                발주 <strong className="font-mono text-slate-900 font-bold">{formatMonthDay(item.orderDate || item.lastOrderDate)}</strong>
+                              <span className="text-[11px] font-mono text-slate-800 font-bold">
+                                {formatMonthDay(item.orderDate || item.lastOrderDate)}
                               </span>
-                              <span className="text-slate-400 font-bold text-xs">→</span>
-                              <span className="text-xs font-medium text-blue-900">
-                                입고 <strong className="font-mono text-blue-700 font-bold">{formatMonthDay(item.expectedArrivalDate)}</strong>
+                              <span className="text-slate-400 text-[10px]">→</span>
+                              <span className="text-[11px] font-mono text-blue-700 font-bold">
+                                {formatMonthDay(item.expectedArrivalDate)}
                               </span>
                               <span
-                                className={`px-1.5 py-0.5 rounded font-extrabold text-xs leading-tight ${
+                                className={`px-1 py-0.2 rounded font-extrabold text-[10px] leading-tight ${
                                   item.dDayStatus === 'today'
                                     ? 'bg-red-600 text-white animate-pulse'
                                     : item.dDayStatus === 'overdue'
@@ -918,7 +909,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => onEditOrder(item)}
-                                className="px-2 py-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors shadow-2xs"
+                                className="px-1.5 py-0.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors cursor-pointer"
                                 title="발주일자/입고예정일/발주수량 수정"
                               >
                                 수정
@@ -936,7 +927,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                                     onCancelOrder(item.id);
                                   }
                                 }}
-                                className="px-2 py-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors shadow-2xs"
+                                className="px-1.5 py-0.5 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded hover:bg-rose-100 transition-colors cursor-pointer"
                                 title="발주 취소"
                               >
                                 취소
@@ -944,15 +935,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                             )}
                           </div>
                         ) : isWorkerMode ? (
-                          <span className="text-xs text-slate-400 font-medium">
-                            읽기 전용 (사무실 발주)
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            읽기전용
                           </span>
                         ) : (
                           <button
                             onClick={() =>
                               onOpenOrderModal(item.vendorId, [item.id])
                             }
-                            className={`text-sm underline font-bold whitespace-nowrap transition-colors ${
+                            className={`text-xs underline font-bold whitespace-nowrap transition-colors cursor-pointer ${
                               item.needsOrder
                                 ? 'text-rose-600 hover:text-rose-800'
                                 : item.isOrderImminent
@@ -970,32 +961,32 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         )}
                       </td>
 
-                      {/* 15. 최근발주: YY.MM.DD 한 줄 표기 */}
-                      <td className="px-3 py-3 border-r border-slate-200 text-center font-mono text-slate-600 text-xs whitespace-nowrap">
+                      {/* 13. 최근발주 */}
+                      <td className="px-1.5 py-2 border-r border-slate-200 text-center font-mono text-slate-600 text-[11px] whitespace-nowrap">
                         {formatShortDate(item.lastOrderDate)}
                       </td>
 
-                      {/* 16. Action buttons */}
-                      <td className="px-3 py-3 text-center space-x-1 whitespace-nowrap">
+                      {/* 14. 관리 */}
+                      <td className="px-1.5 py-2 text-center whitespace-nowrap">
                         {isWorkerMode ? (
-                          <span className="text-xs text-slate-400 font-bold">잠금</span>
+                          <span className="text-[11px] text-slate-400 font-bold">잠금</span>
                         ) : (
-                          <>
+                          <div className="inline-flex items-center justify-center gap-0.5">
                             <button
                               onClick={() => onEditItem(item)}
                               title="품목 정보 수정"
-                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                              className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
                             >
-                              <Edit2 className="w-4 h-4" />
+                              <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => onDeleteItem(item.id)}
                               title="품목 삭제"
-                              className="p-1.5 text-slate-400 hover:text-red-600 rounded transition-colors"
+                              className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          </>
+                          </div>
                         )}
                       </td>
                     </tr>

@@ -96,12 +96,28 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
     setReceiverContact(defaultReceiver);
   }, [defaultReceiver, isOpen]);
 
-  // Detail location
+  // Detail location (summarizes line-specific or item-specific receiving locations)
   const initialDetailLocation = useMemo(() => {
-    const locs = Array.from(
+    const uniqueLines = Array.from(new Set(items.map((it) => it.line)));
+    const rawLocs = Array.from(
       new Set(items.map((it) => it.deliveryDetailLocation || it.deliveryLocation).filter(Boolean))
     );
-    if (locs.length > 0) return locs.join(', ');
+    if (rawLocs.length === 1) {
+      return rawLocs[0] as string;
+    }
+    if (rawLocs.length > 1) {
+      if (uniqueLines.length > 1) {
+        const lineLocPairs = Array.from(
+          new Set(
+            items.map(
+              (it) => `[${it.line}] ${it.deliveryDetailLocation || it.deliveryLocation || ''}`
+            )
+          )
+        );
+        return lineLocPairs.join(' / ');
+      }
+      return rawLocs.join(', ');
+    }
     return selectedFactory === 'asan'
       ? '아산공장 SL라인 진입부'
       : '포승공장 출하1번홈 (공용포장장)';
@@ -146,7 +162,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
         const itemReceiver = it.receiverName
           ? ` (수령: ${it.receiverName} ${it.receiverPhone || ''})`
           : '';
-        const itemLocation = it.deliveryDetailLocation ? ` [하역: ${it.deliveryDetailLocation}]` : '';
+        const resolvedLoc = it.deliveryDetailLocation || it.deliveryLocation || detailLocation;
+        const itemLocation = resolvedLoc ? ` [수령장소: ${resolvedLoc}]` : '';
         return `${idx + 1}. [${it.line}] ${it.itemName} (${it.spec})\n   - 발주수량: ${packQty} ${it.packUnit} (${formatNumber(baseQty)} ${it.baseUnit})\n   - 단가: ${formatNumber(it.unitPrice)}원 | 공급가: ${formatNumber(itemAmount)}원\n   - 용도: ${it.purpose || '-'}${itemReceiver}${itemLocation}`;
       }),
       `----------------------------------------`,
@@ -433,7 +450,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                   const displayReceiver = it.receiverName
                     ? `${it.receiverName} (${it.receiverPhone || ''})`
                     : receiverContact;
-                  const displayLoc = it.deliveryDetailLocation || detailLocation;
+                  const displayLoc =
+                    it.deliveryDetailLocation || it.deliveryLocation || detailLocation;
 
                   return (
                     <tr key={it.id} className="hover:bg-slate-50">
@@ -443,8 +461,8 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                       <td className="px-2.5 py-2.5 border-r border-slate-300 text-center font-bold text-slate-800">
                         {it.line}
                       </td>
-                      <td className="px-2.5 py-2.5 border-r border-slate-300 font-medium text-slate-900">
-                        <div className="text-sm sm:text-base font-medium leading-snug">{it.itemName}</div>
+                      <td className="px-2.5 py-2.5 border-r border-slate-300 font-normal text-slate-900">
+                        <div className="text-sm sm:text-base font-normal leading-snug">{it.itemName}</div>
                         <div className="text-xs text-slate-500 font-mono mt-0.5 leading-snug">{it.spec}</div>
                       </td>
                       <td className="px-2.5 py-2.5 border-r border-slate-300 text-right font-extrabold text-blue-700 font-mono text-base">
@@ -461,7 +479,9 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
                       </td>
                       <td className="px-2.5 py-2.5 border-r border-slate-300 text-xs text-slate-700">
                         <div className="font-bold text-slate-900">{displayReceiver}</div>
-                        <div className="text-slate-500 truncate">{displayLoc}</div>
+                        <div className="text-slate-700 font-medium truncate">
+                          [{it.line}] {displayLoc}
+                        </div>
                       </td>
                       <td className="px-2.5 py-2.5 text-slate-500 text-xs truncate">
                         {it.purpose || it.moqDescription}
