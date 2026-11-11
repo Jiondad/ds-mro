@@ -68,7 +68,7 @@ export function calculateItemMetrics(
         ? Number((currentBaseStock / item.dailyUsage).toFixed(2))
         : 999;
 
-    safetyStockBase = Math.round(item.dailyUsage * safetyDays);
+    safetyStockBase = Math.round(item.dailyUsage * safetyDays); // 안전재고 (예: 15 * 10 = 150 EA)
 
     const leadTime = item.leadTimeDays || (vendor ? vendor.defaultLeadTime : 3);
     const imminentThresholdDays = Number((safetyDays + Math.max(3, leadTime)).toFixed(2));
@@ -76,7 +76,8 @@ export function calculateItemMetrics(
     isStockLow = currentBaseStock <= safetyStockBase || remainingDays <= safetyDays;
     isImminent = !isStockLow && remainingDays <= imminentThresholdDays;
 
-    recommendedBaseOrderQty = Math.round(item.dailyUsage * orderCycleDays);
+    // 요청하신 대로 발주량을 일사용량 * 20일치로 고정 (예: 15 * 20 = 300 EA = 15다발)
+    recommendedBaseOrderQty = Math.round(item.dailyUsage * 20); 
     recommendedPackOrderQty =
       item.unitConversion > 0
         ? Math.max(1, Math.ceil(recommendedBaseOrderQty / item.unitConversion))
