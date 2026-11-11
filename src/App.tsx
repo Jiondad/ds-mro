@@ -87,8 +87,16 @@ import {
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
-  // User authentication & 4-tier RBAC state (Pure in-memory session; Supabase Cloud DB direct)
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  // User authentication & 4-tier RBAC state (sessionStorage 복원 및 유지)
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('ds_mro_current_user');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
+    return null;
+  });
 
   // [계정 관리] 등록 사용자 계정 목록 상태 (Supabase DB 단일 진실 공급원 + admin 기본계정 보장)
   const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() =>
@@ -108,7 +116,16 @@ export default function App() {
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
 
   // [기능 4] 현장 작업자용 간소화 모드(Worker View) 상태
-  const [isWorkerMode, setIsWorkerMode] = useState<boolean>(false);
+  const [isWorkerMode, setIsWorkerMode] = useState<boolean>(() => {
+    try {
+      const saved = sessionStorage.getItem('ds_mro_current_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed?.level === 2;
+      }
+    } catch (e) {}
+    return false;
+  });
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
@@ -231,6 +248,11 @@ export default function App() {
             const refreshed = sortedAccounts.find(
               (a) => a.id === prevUser.id || a.username === prevUser.username
             );
+            if (refreshed) {
+              try {
+                sessionStorage.setItem('ds_mro_current_user', JSON.stringify(refreshed));
+              } catch (e) {}
+            }
             return refreshed || prevUser;
           });
         }
@@ -357,6 +379,9 @@ export default function App() {
 
   const handleLogin = (user: UserAccount) => {
     setCurrentUser(user);
+    try {
+      sessionStorage.setItem('ds_mro_current_user', JSON.stringify(user));
+    } catch (e) {}
 
     if (user.level === 2) {
       // LV.2 현장사용자: 현장 작업자 모드 활성화 및 현장 실사 화면으로 이동
@@ -399,6 +424,10 @@ export default function App() {
         : currentUser.name
       : '';
     setCurrentUser(null);
+    try {
+      sessionStorage.removeItem('ds_mro_current_user');
+    } catch (e) {}
+
     setIsPasswordChangeOpen(false);
     showToast(
       prevName
@@ -606,6 +635,9 @@ export default function App() {
 
     if (currentUser && currentUser.id === payloadAccount.id) {
       setCurrentUser(payloadAccount);
+      try {
+        sessionStorage.setItem('ds_mro_current_user', JSON.stringify(payloadAccount));
+      } catch (e) {}
     }
 
     recordAuditLog({
@@ -2416,3 +2448,4 @@ export default function App() {
     </div>
   );
 }
+```[cite: 14]
