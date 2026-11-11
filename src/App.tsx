@@ -63,23 +63,28 @@ import {
   insertUserAccountToSupabase,
   updateUserAccountInSupabase,
   deleteUserAccountFromSupabase,
+  batchUpsertUserAccountsToSupabase,
+  updateUserPasswordInSupabase,
   upsertInventoryItemToSupabase,
   batchUpsertInventoryItemsToSupabase,
   deleteInventoryItemFromSupabase,
   saveCategoriesToSupabase,
+  deleteCategoryFromSupabase,
   saveVendorsToSupabase,
+  deleteVendorFromSupabase,
   saveUnitsToSupabase,
   saveOrderHistoryToSupabase,
+  deleteOrderHistoryFromSupabase,
   saveUsageLogsToSupabase,
   saveCompanyProfileToSupabase,
   saveMemoToSupabase,
   saveLastAuditTimestampToSupabase,
-  saveUserPasswordsToSupabase,
   insertAuditLogToSupabase,
   clearAuditLogsInSupabase,
   resetAllCloudDataInSupabase,
+  SupabaseMutationResult,
 } from './lib/supabase';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
   // User authentication & 4-tier RBAC state (Pure in-memory session; Supabase Cloud DB direct)
@@ -275,7 +280,7 @@ export default function App() {
         .channel('daeseong_mro_cloud_realtime')
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'mro_app_state' },
+          { event: '*', schema: 'public', table: 'company_profile' },
           () => {
             void syncFromSupabaseCloud({ silent: true });
           }
@@ -283,6 +288,13 @@ export default function App() {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'inventory_items' },
+          () => {
+            void syncFromSupabaseCloud({ silent: true });
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'order_history' },
           () => {
             void syncFromSupabaseCloud({ silent: true });
           }
@@ -396,8 +408,20 @@ export default function App() {
   };
 
   const handleChangePassword = async (username: string, newPassword: string) => {
+    const res = await updateUserPasswordInSupabase(username, newPassword);
+    if (!res.ok) {
+      console.error('[Supabase Password Change Failed]:', res.errorMessage);
+      showToast(`❌ [Supabase 오류] 비밀번호 변경 저장 실패: ${res.errorMessage}`);
+      return;
+    }
+
     const updated = { ...userPasswords, [username]: newPassword };
     setUserPasswords(updated);
+    setUserAccounts((prev) =>
+      prev.map((acc) =>
+        acc.username === username ? { ...acc, password: newPassword } : acc
+      )
+    );
 
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
@@ -407,12 +431,7 @@ export default function App() {
       details: `'${username}' 계정 비밀번호 변경`,
     });
 
-    const res = await saveUserPasswordsToSupabase(updated);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [DB 저장 오류] 비밀번호 클라우드 저장 실패: ${res.errorMessage}`);
-      return;
-    }
-    showToast(`'${username}' 계정의 비밀번호가 사내 보안 정책에 따라 클라우드 DB에 변경·저장되었습니다.`);
+    showToast(`✅ '${username}' 계정의 비밀번호가 Supabase 클라우드 DB에 변경·저장되었습니다.`);
   };
 
   const handleResetUserPassword = async (username: string, displayName?: string) => {
@@ -420,8 +439,21 @@ export default function App() {
       showToast('⚠️ 비밀번호 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
       return;
     }
+
+    const res = await updateUserPasswordInSupabase(username, '1234');
+    if (!res.ok) {
+      console.error('[Supabase Password Reset Failed]:', res.errorMessage);
+      showToast(`❌ [Supabase 오류] 비밀번호 초기화 반영 실패: ${res.errorMessage}`);
+      return;
+    }
+
     const updated = { ...userPasswords, [username]: '1234' };
     setUserPasswords(updated);
+    setUserAccounts((prev) =>
+      prev.map((acc) =>
+        acc.username === username ? { ...acc, password: '1234' } : acc
+      )
+    );
 
     const label = displayName ? `${displayName} (${username})` : username;
     recordAuditLog({
@@ -432,80 +464,113 @@ export default function App() {
       details: `'${label}' 계정 비밀번호 초기화 (1234)`,
     });
 
-    const res = await saveUserPasswordsToSupabase(updated);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [DB 저장 오류] 비밀번호 초기화 반영 실패: ${res.errorMessage}`);
-      return;
-    }
     showToast(
       `🔑 [비밀번호 초기화 완료] '${label}' 계정의 비밀번호가 '1234'로 초기화되었습니다.`
     );
   };
 
-  const handleAddAccount = async (newAccount: UserAccount) => {
-    const nextAccounts = ensureDefaultAdminAccount([...userAccounts, newAccount]);
-    const nextPasswords = { ...userPasswords, [newAccount.username]: '1234' };
+  const handleAddAccount = async (
+    newAccount: UserAccount
+  ): Promise<{ ok: boolean; errorMessage?: string }> => {
+    const accountPayload: UserAccount = {
+      ...newAccount,
+      password: newAccount.password || '1234',
+      department: newAccount.department || newAccount.affiliation || '포승공장',
+      isActive: newAccount.isActive !== false,
+      createdAt: newAccount.createdAt || TODAY_STR,
+    };
+
+    const nextAccounts = ensureDefaultAdminAccount([...userAccounts, accountPayload]);
+    const accRes = await insertUserAccountToSupabase(accountPayload, nextAccounts);
+    if (!accRes.ok) {
+      console.error('[Supabase Add Account Error]:', accRes.errorMessage);
+      showToast(`❌ [Supabase 계정 생성 실패] ${accRes.errorMessage}`);
+      return { ok: false, errorMessage: accRes.errorMessage };
+    }
+
+    const nextPasswords = {
+      ...userPasswords,
+      [accountPayload.username]: accountPayload.password || '1234',
+    };
     setUserAccounts(nextAccounts);
     setUserPasswords(nextPasswords);
 
-    const displayName = newAccount.title
-      ? `${newAccount.name} ${newAccount.title}`
-      : newAccount.name;
+    const displayName = accountPayload.title
+      ? `${accountPayload.name} ${accountPayload.title}`
+      : accountPayload.name;
 
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
-      targetId: newAccount.id,
-      targetName: `${displayName} (${newAccount.username})`,
-      targetLine: newAccount.affiliation,
+      targetId: accountPayload.id,
+      targetName: `${displayName} (${accountPayload.username})`,
+      targetLine: accountPayload.affiliation,
       beforeValue: '미등록',
-      afterValue: `LV.${newAccount.level} (${newAccount.affiliation || '소속미정'})`,
-      details: `신규 사용자 계정 '${displayName} (${newAccount.username})' 생성`,
+      afterValue: `LV.${accountPayload.level} (${accountPayload.affiliation || '소속미정'})`,
+      details: `신규 사용자 계정 '${displayName} (${accountPayload.username})' 생성`,
     });
 
-    const [accRes] = await Promise.all([
-      insertUserAccountToSupabase(newAccount, nextAccounts),
-      saveUserPasswordsToSupabase(nextPasswords),
-    ]);
-
-    if (!accRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${accRes.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `✅ [${newAccount.affiliation || '소속'}] '${displayName} (${newAccount.username})' 계정이 클라우드 DB에 생성되었습니다. (초기 PW: 1234)`
+      `✅ [${accountPayload.affiliation || '소속'}] '${displayName} (${accountPayload.username})' 계정이 Supabase DB에 생성되었습니다. (초기 PW: 1234)`
     );
+    return { ok: true };
   };
 
-  const handleUpdateAccount = async (updatedAccount: UserAccount, previousUsername?: string) => {
+  const handleUpdateAccount = async (
+    updatedAccount: UserAccount,
+    previousUsername?: string
+  ): Promise<{ ok: boolean; errorMessage?: string }> => {
     const oldUsername = previousUsername || updatedAccount.username;
     const oldAcc = userAccounts.find(
       (a) => a.id === updatedAccount.id || (previousUsername && a.username === previousUsername)
     );
 
+    const preservedPassword =
+      updatedAccount.password ||
+      oldAcc?.password ||
+      userPasswords[oldUsername] ||
+      userPasswords[updatedAccount.username] ||
+      '1234';
+
+    const payloadAccount: UserAccount = {
+      ...oldAcc,
+      ...updatedAccount,
+      id: updatedAccount.id,
+      password: preservedPassword,
+      department:
+        updatedAccount.department ||
+        updatedAccount.affiliation ||
+        oldAcc?.department ||
+        '포승공장',
+      isActive: updatedAccount.isActive !== false,
+      createdAt: updatedAccount.createdAt || oldAcc?.createdAt || TODAY_STR,
+    };
+
     const updatedList = userAccounts.map((acc) =>
-      acc.id === updatedAccount.id ? { ...acc, ...updatedAccount, id: acc.id } : acc
+      acc.id === payloadAccount.id ? payloadAccount : acc
     );
     const deduped = new Map<string, UserAccount>();
     updatedList.forEach((acc) => deduped.set(acc.id, acc));
     const sortedAccounts = ensureDefaultAdminAccount(Array.from(deduped.values()));
-    setUserAccounts(sortedAccounts);
 
-    if (previousUsername && previousUsername !== updatedAccount.username) {
-      const updatedPw = { ...userPasswords };
-      if (updatedPw[previousUsername]) {
-        updatedPw[updatedAccount.username] = updatedPw[previousUsername];
-        delete updatedPw[previousUsername];
-      } else {
-        updatedPw[updatedAccount.username] = '1234';
-      }
-      setUserPasswords(updatedPw);
-      void saveUserPasswordsToSupabase(updatedPw);
+    const res = await updateUserAccountInSupabase(payloadAccount, sortedAccounts);
+    if (!res.ok) {
+      console.error('[Supabase Update Account Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 계정 수정 실패] ${res.errorMessage}`);
+      return { ok: false, errorMessage: res.errorMessage };
     }
 
-    const fullDisplayName = updatedAccount.title
-      ? `${updatedAccount.name} ${updatedAccount.title}`
-      : updatedAccount.name;
+    setUserAccounts(sortedAccounts);
+
+    if (previousUsername && previousUsername !== payloadAccount.username) {
+      const updatedPw = { ...userPasswords };
+      updatedPw[payloadAccount.username] = preservedPassword;
+      delete updatedPw[previousUsername];
+      setUserPasswords(updatedPw);
+    }
+
+    const fullDisplayName = payloadAccount.title
+      ? `${payloadAccount.name} ${payloadAccount.title}`
+      : payloadAccount.name;
     const oldFullDisplayName = oldAcc
       ? oldAcc.title
         ? `${oldAcc.name} ${oldAcc.title}`
@@ -520,9 +585,9 @@ export default function App() {
       if (matchesId || matchesOldName) {
         const updatedIt: InventoryItem = {
           ...it,
-          receiverLoginId: updatedAccount.username,
+          receiverLoginId: payloadAccount.username,
           receiverName: fullDisplayName,
-          receiverPhone: updatedAccount.phone || it.receiverPhone,
+          receiverPhone: payloadAccount.phone || it.receiverPhone,
         };
         changedItems.push(updatedIt);
         return updatedIt;
@@ -531,35 +596,34 @@ export default function App() {
     });
 
     if (changedItems.length > 0) {
-      setItems(nextItems);
-      void batchUpsertInventoryItemsToSupabase(changedItems, nextItems);
+      const itemRes = await batchUpsertInventoryItemsToSupabase(changedItems, nextItems);
+      if (itemRes.ok) {
+        setItems(nextItems);
+      } else {
+        console.error('[Supabase Linked Items Update Error]:', itemRes.errorMessage);
+      }
     }
 
-    if (currentUser && currentUser.id === updatedAccount.id) {
-      setCurrentUser(updatedAccount);
+    if (currentUser && currentUser.id === payloadAccount.id) {
+      setCurrentUser(payloadAccount);
     }
 
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
-      targetId: updatedAccount.id,
-      targetName: `${fullDisplayName} (${updatedAccount.username})`,
-      targetLine: updatedAccount.affiliation,
+      targetId: payloadAccount.id,
+      targetName: `${fullDisplayName} (${payloadAccount.username})`,
+      targetLine: payloadAccount.affiliation,
       beforeValue: oldAcc
         ? `${oldAcc.name} / LV.${oldAcc.level} / ${oldAcc.affiliation}`
         : oldUsername,
-      afterValue: `${fullDisplayName} / LV.${updatedAccount.level} / ${updatedAccount.affiliation}`,
-      details: `'${fullDisplayName} (${updatedAccount.username})' 계정 정보 수정`,
+      afterValue: `${fullDisplayName} / LV.${payloadAccount.level} / ${payloadAccount.affiliation}`,
+      details: `'${fullDisplayName} (${payloadAccount.username})' 계정 정보 수정`,
     });
 
-    const res = await updateUserAccountInSupabase(updatedAccount, sortedAccounts);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `✅ '${fullDisplayName} (${updatedAccount.username})' 계정 정보가 클라우드 DB에 업데이트되었습니다.`
+      `✅ '${fullDisplayName} (${payloadAccount.username})' 계정 정보가 Supabase DB에 업데이트되었습니다.`
     );
+    return { ok: true };
   };
 
   const handleToggleAccountActive = async (accountId: string) => {
@@ -570,10 +634,23 @@ export default function App() {
       return;
     }
     const nextActive = target.isActive === false;
-    const updatedTarget: UserAccount = { ...target, isActive: nextActive };
+    const updatedTarget: UserAccount = {
+      ...target,
+      password: target.password || userPasswords[target.username] || '1234',
+      isActive: nextActive,
+    };
+
     const nextAccounts = userAccounts.map((acc) =>
       acc.id === accountId ? updatedTarget : acc
     );
+
+    const res = await updateUserAccountInSupabase(updatedTarget, nextAccounts);
+    if (!res.ok) {
+      console.error('[Supabase Toggle Account Active Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 계정 상태 변경 실패] ${res.errorMessage}`);
+      return;
+    }
+
     setUserAccounts(nextAccounts);
 
     const displayName = target.title ? `${target.name} ${target.title}` : target.name;
@@ -586,12 +663,6 @@ export default function App() {
       afterValue: nextActive ? '활성' : '비활성',
       details: `'${displayName} (${target.username})' 계정 상태 [${nextActive ? '활성' : '비활성'}] 전환`,
     });
-
-    const res = await updateUserAccountInSupabase(updatedTarget, nextAccounts);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
 
     showToast(
       nextActive
@@ -611,12 +682,21 @@ export default function App() {
     const displayName = target.title ? `${target.name} ${target.title}` : target.name;
 
     if (options?.mode === 'deactivate') {
-      const deactivated: UserAccount = { ...target, isActive: false };
+      const deactivated: UserAccount = {
+        ...target,
+        password: target.password || userPasswords[target.username] || '1234',
+        isActive: false,
+      };
       const nextAccounts = userAccounts.map((acc) =>
         acc.id === accountId ? deactivated : acc
       );
-      setUserAccounts(nextAccounts);
       const res = await updateUserAccountInSupabase(deactivated, nextAccounts);
+      if (!res.ok) {
+        console.error('[Supabase Deactivate Account Error]:', res.errorMessage);
+        showToast(`❌ [Supabase 비활성 전환 실패] ${res.errorMessage}`);
+        return;
+      }
+      setUserAccounts(nextAccounts);
       recordAuditLog({
         actionType: 'ACCOUNT_MUTATE',
         targetId: target.id,
@@ -626,10 +706,6 @@ export default function App() {
         afterValue: '비활성 (이력 보존)',
         details: `'${displayName} (${target.username})' 계정 비활성 전환`,
       });
-      if (!res.ok && isDbConnected) {
-        showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-        return;
-      }
       showToast(
         `⛔ '${displayName} (${target.username})' 계정이 연결된 품목 이력 보존을 위해 [비활성] 상태로 전환되었습니다.`
       );
@@ -641,20 +717,27 @@ export default function App() {
     );
     const dbDeleteResult = await deleteUserAccountFromSupabase(accountId, remainingAccounts);
     if (!dbDeleteResult.ok && dbDeleteResult.isForeignKeyError) {
-      const deactivated: UserAccount = { ...target, isActive: false };
+      const deactivated: UserAccount = {
+        ...target,
+        password: target.password || userPasswords[target.username] || '1234',
+        isActive: false,
+      };
       const nextAccounts = userAccounts.map((acc) =>
         acc.id === accountId ? deactivated : acc
       );
-      setUserAccounts(nextAccounts);
-      await updateUserAccountInSupabase(deactivated, nextAccounts);
+      const updateRes = await updateUserAccountInSupabase(deactivated, nextAccounts);
+      if (updateRes.ok) {
+        setUserAccounts(nextAccounts);
+      }
       showToast(
         `⚠️ '${displayName}' 계정이 DB 외래 키(품목/발주 이력)와 연결되어 있어 안전하게 [비활성] 상태로 전환되었습니다.`
       );
       return;
     }
 
-    if (!dbDeleteResult.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 삭제 실패] ${dbDeleteResult.errorMessage}`);
+    if (!dbDeleteResult.ok) {
+      console.error('[Supabase Delete Account Error]:', dbDeleteResult.errorMessage);
+      showToast(`❌ [Supabase 삭제 실패] ${dbDeleteResult.errorMessage}`);
       return;
     }
 
@@ -677,8 +760,10 @@ export default function App() {
         return it;
       });
       if (changed.length > 0) {
-        setItems(nextItems);
-        await batchUpsertInventoryItemsToSupabase(changed, nextItems);
+        const unlinkRes = await batchUpsertInventoryItemsToSupabase(changed, nextItems);
+        if (unlinkRes.ok) {
+          setItems(nextItems);
+        }
       }
     }
 
@@ -688,7 +773,6 @@ export default function App() {
       const updatedPw = { ...userPasswords };
       delete updatedPw[target.username];
       setUserPasswords(updatedPw);
-      void saveUserPasswordsToSupabase(updatedPw);
     }
 
     recordAuditLog({
@@ -701,7 +785,7 @@ export default function App() {
       details: `'${displayName} (${target.username})' 계정 영구 삭제`,
     });
 
-    showToast(`🗑️ '${displayName} (${target.username})' 계정이 클라우드 DB에서 영구 삭제되었습니다.`);
+    showToast(`🗑️ '${displayName} (${target.username})' 계정이 Supabase DB에서 영구 삭제되었습니다.`);
   };
 
   const handleAssignItemReceiver = async (itemId: string, account: UserAccount | null) => {
@@ -718,8 +802,15 @@ export default function App() {
         receiverPhone: undefined,
       };
       const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-      setItems(nextItems);
 
+      const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+      if (!res.ok) {
+        console.error('[Supabase Assign Receiver Error]:', res.errorMessage);
+        showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+        return;
+      }
+
+      setItems(nextItems);
       recordAuditLog({
         actionType: 'ITEM_RECEIVER_ASSIGN',
         targetId: targetItem.id,
@@ -730,11 +821,6 @@ export default function App() {
         details: `[${targetItem.itemName}] 수령자 지정 해제`,
       });
 
-      const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-      if (!res.ok && isDbConnected) {
-        showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-        return;
-      }
       showToast(`💾 [${targetItem.itemName}] 수령자(담당자) 지정 해제 내용이 클라우드 DB에 저장되었습니다.`);
       return;
     }
@@ -748,8 +834,14 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Assign Receiver Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'ITEM_RECEIVER_ASSIGN',
       targetId: targetItem.id,
@@ -760,11 +852,6 @@ export default function App() {
       details: `[${targetItem.itemName}] 수령자 '${fullDisplayName}' 지정`,
     });
 
-    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast(
       `💾 [${targetItem.itemName}] 수령자(담당자) '${fullDisplayName} (${account.affiliation || '소속'})' 변경사항이 클라우드 DB에 저장되었습니다.`
     );
@@ -784,8 +871,14 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Update Delivery Location Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setItems(nextItems);
     const defaultLoc = getDefaultDeliveryLocationForLine(targetItem.line, category);
     recordAuditLog({
       actionType: 'ITEM_LOCATION_UPDATE',
@@ -796,12 +889,6 @@ export default function App() {
       afterValue: trimmed || `기본값 (${defaultLoc})`,
       details: `[${targetItem.itemName}] 수령장소 변경`,
     });
-
-    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
 
     if (trimmed) {
       showToast(
@@ -824,8 +911,14 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Update Item Line Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'ITEM_LINE_UPDATE',
       targetId: targetItem.id,
@@ -835,12 +928,6 @@ export default function App() {
       afterValue: newLine,
       details: `[${targetItem.itemName}] 담당 라인 '${targetItem.line}' → '${newLine}' 변경`,
     });
-
-    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
 
     showToast(
       `💾 [${targetItem.itemName}] 담당 라인이 '${targetItem.line}' → '${newLine}'(으)로 변경되어 클라우드 DB에 저장되었습니다.`
@@ -905,7 +992,6 @@ export default function App() {
         : currentUser.name
       : undefined;
     const nowMs = Date.now();
-    setLastAuditTimestamp(auditLabel);
 
     const updatedItem: InventoryItem = {
       ...targetItem,
@@ -916,6 +1002,21 @@ export default function App() {
     };
 
     const nextItems = items.map((item) => (item.id === itemId ? updatedItem : item));
+
+    const [itemRes, tsRes] = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      saveLastAuditTimestampToSupabase(auditLabel),
+    ]);
+
+    if (!itemRes.ok || !tsRes.ok) {
+      const errMsg = itemRes.errorMessage || tsRes.errorMessage;
+      console.error('[Supabase Update Stock Error]:', errMsg);
+      showToast(`❌ [Supabase 재고 저장 실패] ${errMsg}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setLastAuditTimestamp(auditLabel);
     setItems(nextItems);
 
     recordAuditLog({
@@ -927,15 +1028,6 @@ export default function App() {
       afterValue: `${newPackStock} ${targetItem.packUnit}`,
       details: `[${targetItem.itemName}] 현재고 ${targetItem.currentPackStock} → ${newPackStock} ${targetItem.packUnit} 변경`,
     });
-
-    const [itemRes] = await Promise.all([
-      upsertInventoryItemToSupabase(updatedItem, nextItems),
-      saveLastAuditTimestampToSupabase(auditLabel),
-    ]);
-
-    if (!itemRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
-    }
   };
 
   const handleUpdateDailyUsage = async (itemId: string, newDailyUsage: number) => {
@@ -948,8 +1040,14 @@ export default function App() {
     };
 
     const nextItems = items.map((item) => (item.id === itemId ? updatedItem : item));
-    setItems(nextItems);
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Update Daily Usage Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'SAFETY_STOCK_CALIBRATE',
       targetId: targetItem.id,
@@ -959,11 +1057,6 @@ export default function App() {
       afterValue: `일소모 ${newDailyUsage} ${targetItem.baseUnit}`,
       details: `[${targetItem.itemName}] 기준 일소모량 ${targetItem.dailyUsage} → ${newDailyUsage} ${targetItem.baseUnit} 수정`,
     });
-
-    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-    }
   };
 
   const handleToggleStatus = async (
@@ -1004,8 +1097,14 @@ export default function App() {
           };
 
     const nextItems = items.map((item) => (item.id === itemId ? updatedItem : item));
-    setItems(nextItems);
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Toggle Status Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'ORDER_UPDATE',
       targetId: targetItem.id,
@@ -1015,12 +1114,6 @@ export default function App() {
       afterValue: newStatus,
       details: `[${targetItem.itemName}] 발주 상태 '${targetItem.orderStatus}' → '${newStatus}' 전환`,
     });
-
-    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
 
     showToast(`발주 진행상태가 '${newStatus}' 상태로 변경되어 클라우드 DB에 저장되었습니다.`);
   };
@@ -1046,7 +1139,6 @@ export default function App() {
         : currentUser.name
       : undefined;
     const baseMs = Date.now();
-    setLastAuditTimestamp(auditLabel);
 
     const newLogs: UsageLog[] = [];
     const beforeSummaryParts: string[] = [];
@@ -1084,9 +1176,6 @@ export default function App() {
     });
 
     const nextLogs = newLogs.length > 0 ? [...newLogs, ...usageLogs] : usageLogs;
-    if (newLogs.length > 0) {
-      setUsageLogs(nextLogs);
-    }
 
     let offset = 0;
     const updatedBatch: InventoryItem[] = [];
@@ -1105,29 +1194,43 @@ export default function App() {
       }
       return item;
     });
+
+    const results = await Promise.all([
+      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
+      saveLastAuditTimestampToSupabase(auditLabel),
+      newLogs.length > 0
+        ? saveUsageLogsToSupabase(nextLogs)
+        : Promise.resolve<SupabaseMutationResult>({ ok: true }),
+    ]);
+
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      console.error('[Supabase Batch Commit Stock Error]:', failed.errorMessage);
+      showToast(`❌ [실사 확정 DB 저장 실패] ${failed.errorMessage}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setLastAuditTimestamp(auditLabel);
+    if (newLogs.length > 0) {
+      setUsageLogs(nextLogs);
+    }
     setItems(nextItems);
 
     recordAuditLog({
       actionType: 'STOCK_BATCH_AUDIT',
       targetName: `현장 실사 일괄 확정 (${changeCount}개 품목)`,
-      beforeValue: beforeSummaryParts.slice(0, 5).join(', ') + (changeCount > 5 ? ` 외 ${changeCount - 5}건` : ''),
-      afterValue: afterSummaryParts.slice(0, 5).join(', ') + (changeCount > 5 ? ` 외 ${changeCount - 5}건` : ''),
+      beforeValue:
+        beforeSummaryParts.slice(0, 5).join(', ') +
+        (changeCount > 5 ? ` 외 ${changeCount - 5}건` : ''),
+      afterValue:
+        afterSummaryParts.slice(0, 5).join(', ') +
+        (changeCount > 5 ? ` 외 ${changeCount - 5}건` : ''),
       details: `총 ${changeCount}개 소모품 현장 실사재고 일괄 확정 반영`,
     });
 
-    const [batchRes] = await Promise.all([
-      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
-      saveLastAuditTimestampToSupabase(auditLabel),
-      newLogs.length > 0 ? saveUsageLogsToSupabase(nextLogs) : Promise.resolve({ ok: true }),
-    ]);
-
-    if (!batchRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${batchRes.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `[실사 확정 완료] 총 ${changeCount}개 소모품의 현장 실사재고가 클라우드 DB에 안전하게 확정 반영되었습니다.`
+      `✅ [실사 확정 완료] 총 ${changeCount}개 소모품의 현장 실사재고가 클라우드 DB에 안전하게 확정 반영되었습니다.`
     );
   };
 
@@ -1144,7 +1247,6 @@ export default function App() {
         : currentUser.name
       : undefined;
     const baseMs = Date.now();
-    setLastAuditTimestamp(auditLabel);
 
     let offset = 0;
     const updatedBatch: InventoryItem[] = [];
@@ -1162,6 +1264,21 @@ export default function App() {
       }
       return it;
     });
+
+    const results = await Promise.all([
+      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
+      saveLastAuditTimestampToSupabase(auditLabel),
+    ]);
+
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      console.error('[Supabase Confirm Audit Error]:', failed.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${failed.errorMessage}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setLastAuditTimestamp(auditLabel);
     setItems(nextItems);
 
     recordAuditLog({
@@ -1172,18 +1289,8 @@ export default function App() {
       details: `총 ${itemIds.length}개 품목 실사 완료(수량 변동 없음) 확정`,
     });
 
-    const [res] = await Promise.all([
-      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
-      saveLastAuditTimestampToSupabase(auditLabel),
-    ]);
-
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `[실사 완료 처리] 총 ${itemIds.length}개 품목의 실사 일시가 금일(${TODAY_STR}) 기준으로 클라우드 DB에 갱신되었습니다.`
+      `✅ [실사 완료 처리] 총 ${itemIds.length}개 품목의 실사 일시가 금일(${TODAY_STR}) 기준으로 클라우드 DB에 갱신되었습니다.`
     );
   };
 
@@ -1197,8 +1304,14 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Apply Actual Daily Usage Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'SAFETY_STOCK_CALIBRATE',
       targetId: targetItem.id,
@@ -1208,11 +1321,6 @@ export default function App() {
       afterValue: `실측 보정 ${actualDailyUsage} ${targetItem.baseUnit}`,
       details: `[${targetItem.itemName}] 안전재고 실측 일소모량(${actualDailyUsage}) 반영`,
     });
-
-    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-    }
   };
 
   const handleBatchApplyActualDailyUsage = async (updates: Record<string, number>) => {
@@ -1228,8 +1336,15 @@ export default function App() {
       }
       return it;
     });
-    setItems(nextItems);
 
+    const res = await batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Batch Apply Daily Usage Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'SAFETY_STOCK_CALIBRATE',
       targetName: `안전재고 자동 학습 일괄 보정 (${count}개 품목)`,
@@ -1238,14 +1353,8 @@ export default function App() {
       details: `편차 ±20% 이상 품목 ${count}건 기준 일소모량 일괄 보정`,
     });
 
-    const res = await batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `[안전재고 자동 학습 일괄 반영] 편차 ±20% 이상 품목 ${count}건의 기준 일소모량이 클라우드 DB에 일괄 보정되었습니다.`
+      `✅ [안전재고 자동 학습 일괄 반영] 편차 ±20% 이상 품목 ${count}건의 기준 일소모량이 클라우드 DB에 일괄 보정되었습니다.`
     );
   };
 
@@ -1292,7 +1401,6 @@ export default function App() {
         : currentUser.name
       : undefined;
     const nowMs = Date.now();
-    setLastAuditTimestamp(receiveAuditLabel);
 
     const updatedItem: InventoryItem = {
       ...targetItem,
@@ -1308,7 +1416,6 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
 
     const idx = orderHistory.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
     let nextHistory: OrderHistoryRecord[];
@@ -1349,6 +1456,23 @@ export default function App() {
       };
       nextHistory = [newRecord, ...orderHistory];
     }
+
+    const results = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      saveOrderHistoryToSupabase(nextHistory),
+      saveLastAuditTimestampToSupabase(receiveAuditLabel),
+    ]);
+
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      console.error('[Supabase Receive Stock Error]:', failed.errorMessage);
+      showToast(`❌ [입고확정 DB 저장 실패] ${failed.errorMessage}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setLastAuditTimestamp(receiveAuditLabel);
+    setItems(nextItems);
     setOrderHistory(nextHistory);
 
     recordAuditLog({
@@ -1361,19 +1485,8 @@ export default function App() {
       details: `[${targetItem.itemName}] 입고확정 (+${incoming} ${targetItem.packUnit}, 최종 ${finalStock} ${targetItem.packUnit})`,
     });
 
-    const [itemRes] = await Promise.all([
-      upsertInventoryItemToSupabase(updatedItem, nextItems),
-      saveOrderHistoryToSupabase(nextHistory),
-      saveLastAuditTimestampToSupabase(receiveAuditLabel),
-    ]);
-
-    if (!itemRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `[입고 확정 완료] ${targetItem.itemName} (현장잔여 ${baseRemaining} + 입고 ${incoming} = 최종 ${finalStock} ${targetItem.packUnit}) 클라우드 DB 반영 완료`
+      `✅ [입고 확정 완료] ${targetItem.itemName} (현장잔여 ${baseRemaining} + 입고 ${incoming} = 최종 ${finalStock} ${targetItem.packUnit}) 클라우드 DB 반영 완료`
     );
   };
 
@@ -1407,7 +1520,6 @@ export default function App() {
       }
       return it;
     });
-    setItems(nextItems);
 
     const newRecords: OrderHistoryRecord[] = [];
     const orderedNames: string[] = [];
@@ -1447,6 +1559,23 @@ export default function App() {
     });
 
     const nextHistory = newRecords.length > 0 ? [...newRecords, ...orderHistory] : orderHistory;
+
+    const results = await Promise.all([
+      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
+      newRecords.length > 0
+        ? saveOrderHistoryToSupabase(nextHistory)
+        : Promise.resolve<SupabaseMutationResult>({ ok: true }),
+    ]);
+
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      console.error('[Supabase Confirm Order Error]:', failed.errorMessage);
+      showToast(`❌ [발주 확정 DB 저장 실패] ${failed.errorMessage}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setItems(nextItems);
     if (newRecords.length > 0) {
       setOrderHistory(nextHistory);
     }
@@ -1459,18 +1588,8 @@ export default function App() {
       details: `총 ${itemIds.length}개 품목 신규 발주 확정 (입고예정일: ${expectedArrivalDate})`,
     });
 
-    const [batchRes] = await Promise.all([
-      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
-      newRecords.length > 0 ? saveOrderHistoryToSupabase(nextHistory) : Promise.resolve({ ok: true }),
-    ]);
-
-    if (!batchRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${batchRes.errorMessage}`);
-      return;
-    }
-
     showToast(
-      `총 ${itemIds.length}개 품목의 발주가 클라우드 DB에 확정되었습니다. (입고예정: ${expectedArrivalDate})`
+      `✅ 총 ${itemIds.length}개 품목의 발주가 클라우드 DB에 확정되었습니다. (입고예정: ${expectedArrivalDate})`
     );
   };
 
@@ -1492,7 +1611,6 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
 
     const idx = orderHistory.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
     let nextHistory = orderHistory;
@@ -1511,6 +1629,25 @@ export default function App() {
         totalAmount: totalAmount > 0 ? totalAmount : rec.totalAmount,
       };
       nextHistory = updated;
+    }
+
+    const results = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      idx !== -1
+        ? saveOrderHistoryToSupabase(nextHistory)
+        : Promise.resolve<SupabaseMutationResult>({ ok: true }),
+    ]);
+
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      console.error('[Supabase Update Order Error]:', failed.errorMessage);
+      showToast(`❌ [발주 수정 DB 저장 실패] ${failed.errorMessage}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setItems(nextItems);
+    if (idx !== -1) {
       setOrderHistory(nextHistory);
     }
 
@@ -1524,17 +1661,7 @@ export default function App() {
       details: `[${targetItem.itemName}] 발주 수량 및 입고예정일 변경`,
     });
 
-    const [itemRes] = await Promise.all([
-      upsertInventoryItemToSupabase(updatedItem, nextItems),
-      idx !== -1 ? saveOrderHistoryToSupabase(nextHistory) : Promise.resolve({ ok: true }),
-    ]);
-
-    if (!itemRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
-      return;
-    }
-
-    showToast(`[${targetItem.itemName}] 발주 정보(일정 및 수량)가 클라우드 DB에 변경·저장되었습니다.`);
+    showToast(`✅ [${targetItem.itemName}] 발주 정보(일정 및 수량)가 클라우드 DB에 변경·저장되었습니다.`);
   };
 
   const handleCancelOrder = async (itemId: string) => {
@@ -1550,7 +1677,6 @@ export default function App() {
     };
 
     const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
-    setItems(nextItems);
 
     const idx = orderHistory.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
     let nextHistory = orderHistory;
@@ -1565,6 +1691,25 @@ export default function App() {
           : '관리자에 의해 발주 취소됨',
       };
       nextHistory = updated;
+    }
+
+    const results = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      idx !== -1
+        ? saveOrderHistoryToSupabase(nextHistory)
+        : Promise.resolve<SupabaseMutationResult>({ ok: true }),
+    ]);
+
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      console.error('[Supabase Cancel Order Error]:', failed.errorMessage);
+      showToast(`❌ [발주 취소 DB 저장 실패] ${failed.errorMessage}`);
+      void syncFromSupabaseCloud({ silent: true });
+      return;
+    }
+
+    setItems(nextItems);
+    if (idx !== -1) {
       setOrderHistory(nextHistory);
     }
 
@@ -1578,25 +1723,22 @@ export default function App() {
       details: `[${targetItem.itemName}] 진행 중인 발주 취소`,
     });
 
-    const [itemRes] = await Promise.all([
-      upsertInventoryItemToSupabase(updatedItem, nextItems),
-      idx !== -1 ? saveOrderHistoryToSupabase(nextHistory) : Promise.resolve({ ok: true }),
-    ]);
-
-    if (!itemRes.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
-      return;
-    }
-
-    showToast(`[${targetItem.itemName}] 발주가 취소되었으며, 클라우드 DB에 발주대기 상태로 복구되었습니다.`);
+    showToast(`✅ [${targetItem.itemName}] 발주가 취소되었으며, 클라우드 DB에 발주대기 상태로 복구되었습니다.`);
   };
 
   const handleUpdateOrderHistoryRecord = async (updatedRecord: OrderHistoryRecord) => {
     const nextHistory = orderHistory.map((r) =>
       r.id === updatedRecord.id ? updatedRecord : r
     );
-    setOrderHistory(nextHistory);
 
+    const res = await saveOrderHistoryToSupabase(nextHistory);
+    if (!res.ok) {
+      console.error('[Supabase Update OrderHistory Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
+    setOrderHistory(nextHistory);
     recordAuditLog({
       actionType: 'ORDER_UPDATE',
       targetId: updatedRecord.id,
@@ -1607,16 +1749,18 @@ export default function App() {
       details: `[${updatedRecord.itemName}] 발주 이력 상세 정보 수정`,
     });
 
-    const res = await saveOrderHistoryToSupabase(nextHistory);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast('발주 이력 상세 정보가 클라우드 DB에 수정되었습니다.');
   };
 
   const handleDeleteOrderHistoryRecord = async (recordId: string) => {
     const targetRec = orderHistory.find((r) => r.id === recordId);
+    const res = await deleteOrderHistoryFromSupabase(recordId);
+    if (!res.ok) {
+      console.error('[Supabase OrderHistory Delete Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 삭제 실패] ${res.errorMessage}`);
+      return;
+    }
+
     const nextHistory = orderHistory.filter((r) => r.id !== recordId);
     setOrderHistory(nextHistory);
 
@@ -1632,11 +1776,6 @@ export default function App() {
       });
     }
 
-    const res = await saveOrderHistoryToSupabase(nextHistory);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast('발주 이력 레코드가 클라우드 DB에서 삭제되었습니다.');
   };
 
@@ -1682,8 +1821,15 @@ export default function App() {
     const prevItem = items.find((i) => i.id === item.id);
     const exists = items.some((i) => i.id === item.id);
     const nextItems = exists ? items.map((i) => (i.id === item.id ? item : i)) : [item, ...items];
-    setItems(nextItems);
 
+    const res = await upsertInventoryItemToSupabase(item, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Save Item Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
+    setItems(nextItems);
     recordAuditLog({
       actionType: prevItem ? 'ITEM_UPDATE' : 'ITEM_CREATE',
       targetId: item.id,
@@ -1698,12 +1844,6 @@ export default function App() {
         : `신규 소모품 '${item.itemName}' 등록`,
     });
 
-    const res = await upsertInventoryItemToSupabase(item, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
-
     showToast(`💾 소모품 '${item.itemName}' 정보가 클라우드 DB에 안전하게 저장되었습니다.`);
   };
 
@@ -1711,8 +1851,15 @@ export default function App() {
     const it = items.find((i) => i.id === itemId);
     if (!it) return;
     const nextItems = items.filter((i) => i.id !== itemId);
-    setItems(nextItems);
 
+    const res = await deleteInventoryItemFromSupabase(itemId, nextItems);
+    if (!res.ok) {
+      console.error('[Supabase Delete Item Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 삭제 실패] ${res.errorMessage}`);
+      return;
+    }
+
+    setItems(nextItems);
     recordAuditLog({
       actionType: 'ITEM_DELETE',
       targetId: it.id,
@@ -1723,19 +1870,19 @@ export default function App() {
       details: `소모품 '${it.itemName} (${it.spec})' 마스터 삭제`,
     });
 
-    const res = await deleteInventoryItemFromSupabase(itemId, nextItems);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 삭제 실패] ${res.errorMessage}`);
-      return;
-    }
-
     showToast(`🗑️ '${it.itemName} (${it.spec})' 품목이 클라우드 DB에서 삭제되었습니다.`);
   };
 
   const handleUpdateCompanyProfile = async (profile: CompanyProfile) => {
     const prevBudget = companyProfile.monthlyBudget;
-    setCompanyProfile(profile);
+    const res = await saveCompanyProfileToSupabase(profile);
+    if (!res.ok) {
+      console.error('[Supabase Save CompanyProfile Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setCompanyProfile(profile);
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
       targetName: `자사 프로필 및 월 예산 설정 (${profile.companyName})`,
@@ -1744,19 +1891,19 @@ export default function App() {
       details: '자사 기준정보 및 월별 소모품 예산 한도 수정',
     });
 
-    const res = await saveCompanyProfileToSupabase(profile);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
-
     showToast('💾 자사 기준정보 및 월별 소모품 예산 한도가 클라우드 DB에 저장되었습니다.');
   };
 
   const handleAddCategory = async (cat: Category) => {
     const next = [...categories, cat];
-    setCategories(next);
+    const res = await saveCategoriesToSupabase(next);
+    if (!res.ok) {
+      console.error('[Supabase Add Category Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setCategories(next);
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
       targetId: cat.id,
@@ -1766,18 +1913,19 @@ export default function App() {
       details: `신규 카테고리 '${cat.name}' 추가`,
     });
 
-    const res = await saveCategoriesToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast(`💾 카테고리 '${cat.name}'이(가) 클라우드 DB에 추가 및 저장되었습니다.`);
   };
 
   const handleUpdateCategory = async (cat: Category) => {
     const next = categories.map((c) => (c.id === cat.id ? cat : c));
-    setCategories(next);
+    const res = await saveCategoriesToSupabase(next);
+    if (!res.ok) {
+      console.error('[Supabase Update Category Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
+    setCategories(next);
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
       targetId: cat.id,
@@ -1787,16 +1935,18 @@ export default function App() {
       details: `카테고리 '${cat.name}' 설정 및 라인별 수령장소 수정`,
     });
 
-    const res = await saveCategoriesToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast(`💾 카테고리 '${cat.name}' 설정 및 라인별 수령장소가 클라우드 DB에 저장되었습니다.`);
   };
 
   const handleDeleteCategory = async (catId: string) => {
     const targetCat = categories.find((c) => c.id === catId);
+    const res = await deleteCategoryFromSupabase(catId);
+    if (!res.ok) {
+      console.error('[Supabase Delete Category Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 삭제 실패] ${res.errorMessage}`);
+      return;
+    }
+
     const next = categories.filter((c) => c.id !== catId);
     setCategories(next);
 
@@ -1811,16 +1961,17 @@ export default function App() {
       });
     }
 
-    const res = await saveCategoriesToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast('🗑️ 카테고리가 클라우드 DB에서 삭제되었습니다.');
   };
 
   const handleAddVendor = async (vend: Vendor) => {
     const next = [...vendors, vend];
+    const res = await saveVendorsToSupabase(next);
+    if (!res.ok) {
+      console.error('[Supabase Add Vendor Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     setVendors(next);
 
     recordAuditLog({
@@ -1832,16 +1983,17 @@ export default function App() {
       details: `신규 공급업체 '${vend.name}' 등록`,
     });
 
-    const res = await saveVendorsToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast(`💾 공급업체 '${vend.name}'이(가) 클라우드 DB에 등록되었습니다.`);
   };
 
   const handleUpdateVendor = async (vend: Vendor) => {
     const next = vendors.map((v) => (v.id === vend.id ? vend : v));
+    const res = await saveVendorsToSupabase(next);
+    if (!res.ok) {
+      console.error('[Supabase Update Vendor Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     setVendors(next);
 
     recordAuditLog({
@@ -1853,16 +2005,18 @@ export default function App() {
       details: `공급업체 '${vend.name}' 정보 수정`,
     });
 
-    const res = await saveVendorsToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast(`💾 공급업체 '${vend.name}' 정보가 클라우드 DB에 수정·저장되었습니다.`);
   };
 
   const handleDeleteVendor = async (vendId: string) => {
     const targetVendor = vendors.find((v) => v.id === vendId);
+    const res = await deleteVendorFromSupabase(vendId);
+    if (!res.ok) {
+      console.error('[Supabase Delete Vendor Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 삭제 실패] ${res.errorMessage}`);
+      return;
+    }
+
     const next = vendors.filter((v) => v.id !== vendId);
     setVendors(next);
 
@@ -1877,35 +2031,30 @@ export default function App() {
       });
     }
 
-    const res = await saveVendorsToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
-      return;
-    }
     showToast('🗑️ 공급업체가 클라우드 DB에서 삭제되었습니다.');
   };
 
   const handleAddUnit = async (u: Unit) => {
     const next = [...units, u];
-    setUnits(next);
-
     const res = await saveUnitsToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+    if (!res.ok) {
+      console.error('[Supabase Add Unit Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
       return;
     }
+    setUnits(next);
     showToast(`💾 단위 '${u.name}'이(가) 클라우드 DB에 등록되었습니다.`);
   };
 
   const handleDeleteUnit = async (unitId: string) => {
     const next = units.filter((u) => u.id !== unitId);
-    setUnits(next);
-
     const res = await saveUnitsToSupabase(next);
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+    if (!res.ok) {
+      console.error('[Supabase Delete Unit Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 저장 실패] ${res.errorMessage}`);
       return;
     }
+    setUnits(next);
     showToast('🗑️ 단위가 클라우드 DB에서 삭제되었습니다.');
   };
 
@@ -1913,17 +2062,23 @@ export default function App() {
     setIsCloudSyncing(true);
     try {
       const results = await Promise.all([
+        batchUpsertUserAccountsToSupabase(
+          userAccounts.map((acc) => ({
+            ...acc,
+            password: acc.password || userPasswords[acc.username] || '1234',
+          }))
+        ),
         batchUpsertInventoryItemsToSupabase(items, items),
         saveCategoriesToSupabase(categories),
         saveVendorsToSupabase(vendors),
         saveUnitsToSupabase(units),
         saveCompanyProfileToSupabase(companyProfile),
-        saveUserPasswordsToSupabase(userPasswords),
       ]);
 
       const failed = results.find((r) => !r.ok);
       if (failed) {
-        showToast(`⚠️ [Supabase 저장 실패] ${failed.errorMessage}`);
+        console.error('[Supabase Master Save Error]:', failed.errorMessage);
+        showToast(`❌ [Supabase 저장 실패] ${failed.errorMessage}`);
         return;
       }
 
@@ -1932,7 +2087,11 @@ export default function App() {
       );
     } catch (e) {
       console.error('Failed to manually save master changes to Supabase', e);
-      showToast(`⚠️ [저장 오류] ${label} 클라우드 DB 동기화 중 오류가 발생했습니다.`);
+      showToast(
+        `❌ [저장 오류] ${label} 클라우드 DB 동기화 중 예외가 발생했습니다: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
     } finally {
       setIsCloudSyncing(false);
     }
@@ -1943,12 +2102,13 @@ export default function App() {
       showToast('⚠️ 변경 이력 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
       return;
     }
-    setAuditLogs([]);
     const res = await clearAuditLogsInSupabase();
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [Supabase 삭제 실패] ${res.errorMessage}`);
+    if (!res.ok) {
+      console.error('[Supabase Clear Audit Logs Error]:', res.errorMessage);
+      showToast(`❌ [Supabase 삭제 실패] ${res.errorMessage}`);
       return;
     }
+    setAuditLogs([]);
     showToast('🗑️ 모든 데이터 변경 이력(Audit Log)이 클라우드 DB에서 초기화되었습니다.');
   };
 
@@ -1967,6 +2127,20 @@ export default function App() {
       details: '최고관리자에 의한 초기 데이터 리셋 실행',
     });
 
+    const res = await resetAllCloudDataInSupabase(
+      INITIAL_COMPANY_PROFILE,
+      INITIAL_USER_ACCOUNTS,
+      INITIAL_UNITS,
+      INITIAL_MEMO
+    );
+    if (!res.ok) {
+      console.error('[Supabase Reset All Data Error]:', res.errorMessage);
+      showToast(`❌ [클라우드 DB 초기화 실패] ${res.errorMessage}`);
+      return;
+    }
+
+    await insertAuditLogToSupabase(resetEntry, [resetEntry]);
+
     setItems([]);
     setCategories([]);
     setVendors([]);
@@ -1978,19 +2152,6 @@ export default function App() {
     setUserAccounts(ensureDefaultAdminAccount(INITIAL_USER_ACCOUNTS));
     setUserPasswords({ admin: '1234' });
     setAuditLogs([resetEntry]);
-
-    const res = await resetAllCloudDataInSupabase(
-      INITIAL_COMPANY_PROFILE,
-      INITIAL_USER_ACCOUNTS,
-      INITIAL_UNITS,
-      INITIAL_MEMO
-    );
-    await insertAuditLogToSupabase(resetEntry, [resetEntry]);
-
-    if (!res.ok && isDbConnected) {
-      showToast(`⚠️ [클라우드 DB 초기화 경고] ${res.errorMessage}`);
-      return;
-    }
 
     showToast('초기화가 완료되었습니다. (Supabase 클라우드 DB의 모든 현장/재고 데이터가 초기화되었습니다)');
   };
@@ -2027,9 +2188,19 @@ export default function App() {
       />
 
       {globalToast && (
-        <div className="fixed top-24 sm:top-20 right-3 sm:right-6 left-3 sm:left-auto max-w-md z-50 bg-slate-900 text-white px-4 sm:px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 sm:gap-3 border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-200">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs sm:text-sm font-semibold">{globalToast}</span>
+        <div
+          className={`fixed top-24 sm:top-20 right-3 sm:right-6 left-3 sm:left-auto max-w-lg z-50 px-4 sm:px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 sm:gap-3 border animate-in fade-in slide-in-from-top-4 duration-200 ${
+            globalToast.startsWith('❌') || globalToast.startsWith('⚠️')
+              ? 'bg-rose-950 text-white border-rose-700'
+              : 'bg-slate-900 text-white border-slate-700'
+          }`}
+        >
+          {globalToast.startsWith('❌') || globalToast.startsWith('⚠️') ? (
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          )}
+          <span className="text-xs sm:text-sm font-semibold break-words">{globalToast}</span>
         </div>
       )}
 
@@ -2150,8 +2321,8 @@ export default function App() {
             items={calculatedItems}
             userPasswords={userPasswords}
             currentUser={currentUser}
-            onAddAccount={(acc) => void handleAddAccount(acc)}
-            onUpdateAccount={(acc, prevId) => void handleUpdateAccount(acc, prevId)}
+            onAddAccount={handleAddAccount}
+            onUpdateAccount={handleUpdateAccount}
             onDeleteAccount={(id, opts) => void handleDeleteAccount(id, opts)}
             onToggleAccountActive={(id) => void handleToggleAccountActive(id)}
             onResetUserPassword={(u, d) => void handleResetUserPassword(u, d)}

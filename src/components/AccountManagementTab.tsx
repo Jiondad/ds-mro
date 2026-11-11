@@ -31,8 +31,11 @@ interface AccountManagementTabProps {
   items: CalculatedItem[];
   userPasswords: Record<string, string>;
   currentUser?: UserAccount | null;
-  onAddAccount: (newAccount: UserAccount) => void;
-  onUpdateAccount: (updatedAccount: UserAccount, previousUsername?: string) => void;
+  onAddAccount: (newAccount: UserAccount) => Promise<{ ok: boolean; errorMessage?: string }> | void;
+  onUpdateAccount: (
+    updatedAccount: UserAccount,
+    previousUsername?: string
+  ) => Promise<{ ok: boolean; errorMessage?: string }> | void;
   onDeleteAccount: (accountId: string, options?: DeleteAccountOptions) => void;
   onToggleAccountActive: (accountId: string) => void;
   onResetUserPassword: (username: string, displayName?: string) => void;
@@ -67,6 +70,8 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
   const [username, setUsername] = useState<string>('');
   const [level, setLevel] = useState<UserLevel>(1);
   const [formError, setFormError] = useState<string>('');
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
 
   // Search & Filter States (persisted across F5 refresh & URL query params)
   const [searchQuery, setSearchQuery] = useUrlPersistedState<string>(
@@ -204,8 +209,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
     );
   };
 
-  const handleCreateAccount = (e: React.FormEvent) => {
+  const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingCreate) return;
     setFormError('');
 
     const trimmedName = name.trim();
@@ -247,11 +253,27 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
       createdAt: TODAY_STR,
     };
 
-    onAddAccount(newAcc);
-    setName('');
-    setPhone('');
-    setUsername('');
-    setLevel(1);
+    setIsSubmittingCreate(true);
+    try {
+      const res = await onAddAccount(newAcc);
+      if (res && !res.ok) {
+        setFormError(
+          `[Supabase 통신 오류] ${res.errorMessage || '계정 생성에 실패했습니다.'}`
+        );
+        return;
+      }
+      setName('');
+      setPhone('');
+      setUsername('');
+      setLevel(1);
+    } catch (err) {
+      console.error('[AccountManagementTab Create Error]:', err);
+      setFormError(
+        `[예외 발생] ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setIsSubmittingCreate(false);
+    }
   };
 
   const handleOpenEditModal = (acc: UserAccount) => {
@@ -264,9 +286,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
     setEditError('');
   };
 
-  const handleSaveEditModal = (e: React.FormEvent) => {
+  const handleSaveEditModal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAccount) return;
+    if (!editingAccount || isSubmittingEdit) return;
     setEditError('');
 
     const trimmedName = editingAccount.name.trim();
@@ -310,8 +332,24 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({
       roleLabel,
     };
 
-    onUpdateAccount(updatedRecord, editOriginalUsername);
-    setEditingAccount(null);
+    setIsSubmittingEdit(true);
+    try {
+      const res = await onUpdateAccount(updatedRecord, editOriginalUsername);
+      if (res && !res.ok) {
+        setEditError(
+          `[Supabase 통신 오류] ${res.errorMessage || '계정 정보 업데이트에 실패했습니다.'}`
+        );
+        return;
+      }
+      setEditingAccount(null);
+    } catch (err) {
+      console.error('[AccountManagementTab Update Error]:', err);
+      setEditError(
+        `[예외 발생] ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setIsSubmittingEdit(false);
+    }
   };
 
   const totalFieldUsers = accounts.filter((a) => a.level === 1 || a.level === 2).length;
