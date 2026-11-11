@@ -110,7 +110,6 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="w-full max-w-[1920px] mx-auto px-3 sm:px-5">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
           
-          {/* Brand Logo & Title */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             <div
               className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm sm:text-base tracking-wider shadow-inner shrink-0 ${
@@ -135,7 +134,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Desktop Navigation Tabs (PC 화면 전용 가로형 메뉴) */}
           <div className="hidden lg:flex items-center gap-1 xl:gap-1.5">
             {isEffectiveWorkerView ? (
               <nav className="flex items-center gap-2">
@@ -216,7 +214,7 @@ export const Header: React.FC<HeaderProps> = ({
                     }`}
                   >
                     <FileText className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
-                    <span>거래처 발주서 발행</span>
+                    <span>발주서 발행</span>
                   </button>
                 )}
 
@@ -279,7 +277,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Desktop Right Controls (PC 전용 우측 버튼 그룹) */}
           <div className="hidden lg:flex items-center gap-2 shrink-0">
             {onToggleWorkerMode && userLevel !== 2 && userLevel !== 3 && (
               <button
@@ -366,7 +363,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Mobile Hamburger Button (< lg): 모바일 화면 전용 삼선 햄버거 버튼 */}
           <div className="flex items-center gap-1.5 lg:hidden">
             {currentUser && (
               <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 px-2 py-1 rounded-lg text-[11px]">
@@ -388,11 +384,8 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Mobile Dropdown Drawer (모바일 삼선 메뉴 클릭 시 펼쳐지는 세로형 히든 패널) */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-slate-950 border-t border-slate-800 px-4 py-4 space-y-4 animate-in slide-in-from-top-2 duration-150">
-          
-          {/* 사용자 정보 & 권한 칩 */}
+        <div className="lg:hidden bg-slate-950 border-t border-slate-800 px-4 py-4 space-y-4">
           {currentUser && (
             <div className="flex items-center justify-between bg-slate-900 border border-slate-800 p-3 rounded-xl">
               <div className="flex items-center gap-2">
@@ -408,7 +401,6 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* 모바일 메인 네비게이션 탭 목록 */}
           <div className="space-y-1.5">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">메뉴 네비게이션</div>
             
@@ -456,7 +448,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <FileText className="w-4 h-4 text-emerald-400" />
-                <span>거래처 발주서 발행</span>
+                <span>발주서 발행</span>
               </button>
             )}
 
@@ -509,7 +501,6 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* 모바일 빠른 작업 버튼 (품목등록, 현장모드, 새로고침 등) */}
           <div className="space-y-1.5 pt-2 border-t border-slate-800">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">빠른 제어 & 작업</div>
             
@@ -593,7 +584,6 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      {/* Worker Mode / LV.2 Field User Active Banner */}
       {isEffectiveWorkerView && (
         <div className="bg-amber-400 text-slate-950 px-3 sm:px-6 py-1.5 text-xs font-bold border-t border-amber-500/40">
           <div className="w-full max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-2">
