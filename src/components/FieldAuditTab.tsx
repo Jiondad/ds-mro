@@ -100,7 +100,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     ''
   );
 
-  // 상단 검색 필터 및 공지/알림 영역 토글 상태 (모바일 시인성 확보를 위해 디폴트 닫힘 상태)
+  // '모든 카테고리' 드롭다운부터 하단 알림 영역까지의 토글 상태 (디폴트 닫힘 상태)
   const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
 
   // Sorting state: default is fixed '라인 > 카테고리 > 품목명' (절대 실사 입력 중 행 점프 없음)
@@ -355,8 +355,15 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     ).length;
   }, [items]);
 
-  // Helper to get formatted receiver label for a single item
+  // Helper to get formatted receiver label for a single item (품목 자체 지정값 우선 반영)
   const getItemReceiverDisplay = (item: CalculatedItem): string | null => {
+    if (item.receiverName && item.receiverName.trim()) {
+      if (item.receiverName.includes('[')) {
+        return item.receiverName.trim();
+      }
+      return `[${getLineShortLabel(item.line)}] ${item.receiverName.trim()}`;
+    }
+
     const matchedAcc = userAccounts.find((acc) => doesItemMatchAccount(item, acc));
     if (matchedAcc) {
       const fullName =
@@ -365,9 +372,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
           : matchedAcc.name;
       return `[${matchedAcc.affiliation || '현장'}] ${fullName}`;
     }
-    if (item.receiverName && item.receiverName.trim()) {
-      return `[${getLineShortLabel(item.line)}] ${item.receiverName.trim()}`;
-    }
+
     return null;
   };
 
@@ -497,12 +502,52 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
         </div>
       )}
 
-      {/* 모바일 시인성 확보를 위한 상단 필터 & 공지 영역 접기/펼치기 토글 바 */}
+      {/* 1. 공장 라인 선택 버튼 영역 (항상 최상단 고정 노출) */}
+      <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 w-full">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md text-xs font-semibold overflow-x-auto no-scrollbar max-w-full">
+            {LINE_FILTERS.map((f) => {
+              const isSelected = selectedLine === f.key;
+
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setSelectedLine(f.key)}
+                  className={`px-2.5 py-1.5 rounded transition-all whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1 ${
+                    isSelected
+                      ? f.highlight
+                        ? 'bg-blue-600 text-white shadow-xs font-bold'
+                        : 'bg-white text-blue-700 shadow-xs font-bold'
+                      : f.highlight
+                      ? 'text-blue-700 font-semibold hover:bg-slate-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span>{f.label}</span>
+                  <span
+                    className={`text-[10px] ${
+                      isSelected && f.highlight
+                        ? 'text-blue-100'
+                        : isSelected
+                        ? 'text-blue-500'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    ({f.count})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. '모든 카테고리'부터 하단 알림 영역까지를 접고 펼치는 토글 바 */}
       <div className="bg-slate-900 text-white px-3.5 py-2.5 rounded-lg shadow-xs flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="w-4 h-4 text-blue-400 shrink-0" />
           <span className="text-xs font-bold">
-            검색 필터 및 공지 요약
+            상세 필터 및 공지 요약
           </span>
           {!isFilterExpanded && (
             <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-medium hidden sm:inline">
@@ -525,55 +570,17 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
           onClick={() => setIsFilterExpanded(!isFilterExpanded)}
           className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-bold transition-colors cursor-pointer shrink-0"
         >
-          <span>{isFilterExpanded ? '필터 접기 ▲' : '필터 및 요약 열기 ▼'}</span>
+          <span>{isFilterExpanded ? '필터 접기 ▲' : '상세 필터 및 요약 열기 ▼'}</span>
           {isFilterExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
       </div>
 
-      {/* 토글로 여닫을 수 있는 상단 필터 및 공지 영역 (isFilterExpanded가 true일 때만 노출, 디폴트는 false) */}
+      {/* 토글로 여닫을 수 있는 상세 필터 및 공지 영역 (isFilterExpanded가 true일 때만 노출) */}
       {isFilterExpanded && (
         <div className="space-y-3 animate-in fade-in zoom-in-98 duration-150">
-          {/* Top Unified Control Header Bar */}
           <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
-            {/* Left: Line Segmented Filter Tabs + Category Dropdown right next to it */}
+            {/* Category & Receiver Filters */}
             <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-              {/* Line Segmented Buttons */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md text-xs font-semibold overflow-x-auto no-scrollbar max-w-full">
-                {LINE_FILTERS.map((f) => {
-                  const isSelected = selectedLine === f.key;
-
-                  return (
-                    <button
-                      key={f.key}
-                      onClick={() => setSelectedLine(f.key)}
-                      className={`px-2.5 py-1.5 rounded transition-all whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1 ${
-                        isSelected
-                          ? f.highlight
-                            ? 'bg-blue-600 text-white shadow-xs font-bold'
-                            : 'bg-white text-blue-700 shadow-xs font-bold'
-                          : f.highlight
-                          ? 'text-blue-700 font-semibold hover:bg-slate-200'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <span>{f.label}</span>
-                      <span
-                        className={`text-[10px] ${
-                          isSelected && f.highlight
-                            ? 'text-blue-100'
-                            : isSelected
-                            ? 'text-blue-500'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        ({f.count})
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Category Dropdown right next to Line buttons */}
               <div className="w-full sm:w-48">
                 <select
                   value={selectedCategory}
@@ -589,7 +596,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                 </select>
               </div>
 
-              {/* Receiver (수령인/담당자) Dropdown Selector */}
               <div className="relative flex items-center w-full sm:w-56">
                 <UserCheck
                   className={`w-3.5 h-3.5 absolute left-2.5 pointer-events-none ${
@@ -635,9 +641,8 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
               </div>
             </div>
 
-            {/* Right: Search box + Awaiting Filter Toggle + Sorting indicator */}
+            {/* Search box & Toggles */}
             <div className="flex flex-wrap items-center gap-2 flex-1 justify-start lg:justify-end w-full lg:w-auto">
-              {/* Search box */}
               <div className="relative w-full sm:w-56">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
                 <input
@@ -657,7 +662,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                 )}
               </div>
 
-              {/* Audit Delay Warning Filter Toggle */}
               <button
                 onClick={() => {
                   setFilterOnlyAuditDelayed(!filterOnlyAuditDelayed);
@@ -678,7 +682,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                 <span>⚠️ 실사 지연 품목 {totalAuditDelayedCount}건</span>
               </button>
 
-              {/* Awaiting toggle */}
               <button
                 onClick={() => {
                   setFilterOnlyAwaiting(!filterOnlyAwaiting);
@@ -705,7 +708,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                 </span>
               </button>
 
-              {/* Default Sorting Reset indicator */}
               {sortField !== 'default' && (
                 <button
                   onClick={() => {
@@ -735,7 +737,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
             }`}
           >
             <div className="p-2.5 sm:p-3 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-              {/* Left: 공지 & 상태 구역 */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                   {totalAuditDelayedCount > 0 ? (
@@ -1445,10 +1446,10 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       <span>
                         수령장소: {item.deliveryDetailLocation || item.deliveryLocation || '-'}
                       </span>
-                      {item.receiverName && (
+                      {getItemReceiverDisplay(item) && (
                         <>
                           <span>·</span>
-                          <span>수령담당: {item.receiverName}</span>
+                          <span className="text-blue-700 font-bold">수령인: {getItemReceiverDisplay(item)}</span>
                         </>
                       )}
                       {item.purpose && (
