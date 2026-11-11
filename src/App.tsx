@@ -132,8 +132,16 @@ export default function App() {
     resolveInitialActiveTab(null, false)
   );
 
-  // Company Profile state (Supabase Cloud DB Direct)
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(INITIAL_COMPANY_PROFILE);
+  // Company Profile state (sessionStorage 캐시 우선 적용으로 새로고침 시 깜빡임 차단)
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
+    try {
+      const saved = sessionStorage.getItem('ds_mro_company_profile');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
+    return INITIAL_COMPANY_PROFILE;
+  });
 
   // ----------------------------------------------------
   // Supabase Cloud DB 단일 연동 상태 (브라우저 스토리지 캐시 완전 배제)
@@ -234,7 +242,12 @@ export default function App() {
         if (snapshot.orderHistory !== null) setOrderHistory(snapshot.orderHistory);
         if (snapshot.usageLogs !== null) setUsageLogs(snapshot.usageLogs);
         if (snapshot.auditLogs !== null) setAuditLogs(snapshot.auditLogs);
-        if (snapshot.companyProfile !== null) setCompanyProfile(snapshot.companyProfile);
+        if (snapshot.companyProfile !== null) {
+          setCompanyProfile(snapshot.companyProfile);
+          try {
+            sessionStorage.setItem('ds_mro_company_profile', JSON.stringify(snapshot.companyProfile));
+          } catch (e) {}
+        }
         if (snapshot.memo !== null) setMemo(snapshot.memo);
         if (snapshot.lastAuditTimestamp !== null) {
           setLastAuditTimestamp(snapshot.lastAuditTimestamp);
@@ -1915,6 +1928,10 @@ export default function App() {
     }
 
     setCompanyProfile(profile);
+    try {
+      sessionStorage.setItem('ds_mro_company_profile', JSON.stringify(profile));
+    } catch (e) {}
+
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
       targetName: `자사 프로필 및 월 예산 설정 (${profile.companyName})`,
@@ -2181,6 +2198,9 @@ export default function App() {
     setOrderHistory([]);
     setUsageLogs([]);
     setCompanyProfile(INITIAL_COMPANY_PROFILE);
+    try {
+      sessionStorage.setItem('ds_mro_company_profile', JSON.stringify(INITIAL_COMPANY_PROFILE));
+    } catch (e) {}
     setUserAccounts(ensureDefaultAdminAccount(INITIAL_USER_ACCOUNTS));
     setUserPasswords({ admin: '1234' });
     setAuditLogs([resetEntry]);
