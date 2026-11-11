@@ -382,22 +382,48 @@ export function compareItemsByDefaultOrder<
 }
 
 /**
- * [계정 관리] 사용자 계정 정렬 함수 (소속 > 권한 레벨순)
- * - 1순위: 소속 공장/라인 기준 정렬 (포승공장, SL1, SL2, 공용, 아산공장 등)
- * - 2순위: 권한 레벨 순서 (LV.0 최고관리자 -> LV.1 현장관리자 -> LV.2 현장사용자 -> LV.3 사무실사용자 순)
- * - 3순위: 사용자 이름 가나다순 정렬
+ * [계정 관리] 사용자 계정 정렬 함수 (최고관리자 최상단 고정 + 소속 가중치 순 + 권한 레벨 순)
+ * - 최상단 고정: 최고관리자(admin 또는 level === 0)
+ * - 1순위 소속 가중치: 포승공장(0) > SL1(1) > SL2(2) > 공용(3) > 아산공장(4) > 관리팀(5)
+ * - 2순위 권한 레벨: 0 -> 1 -> 2 -> 3
+ * - 3순위 이름: 가나다순
  */
 export function compareUserAccountsByAffiliation(a: UserAccount, b: UserAccount): number {
-  const affA = (a.affiliation || a.department || '포승공장').trim();
-  const affB = (b.affiliation || b.department || '포승공장').trim();
+  // 0순위: 최고관리자(admin 또는 level 0) 무조건 최상단 고정
+  const isSuperAdminA = a.username === 'admin' || a.level === 0;
+  const isSuperAdminB = b.username === 'admin' || b.level === 0;
+  if (isSuperAdminA && !isSuperAdminB) return -1;
+  if (!isSuperAdminA && isSuperAdminB) return 1;
 
-  // 1순위: 소속 기준 오름차순 정렬 (가나다순)
-  const lineCmp = affA.localeCompare(affB, 'ko', { numeric: true, sensitivity: 'base' });
-  if (lineCmp !== 0) {
-    return lineCmp;
+  // 소속(공장/라인) 가중치 매핑 함수
+  const getAffiliationPriority = (affiliation?: string, department?: string): number => {
+    const text = `${affiliation || ''} ${department || ''}`.trim();
+    if (text.includes('포승공장') || text === '포승') return 0;
+    if (text.includes('SL1')) return 1;
+    if (text.includes('SL2')) return 2;
+    if (text.includes('공용') || text.includes('포장') || text.includes('출하')) return 3;
+    if (text.includes('아산공장') || text.includes('아산')) return 4;
+    if (text.includes('관리팀') || text.includes('사무실')) return 5;
+    return 99; // 기타 소속은 후순위
+  };
+
+  const priorityA = getAffiliationPriority(a.affiliation, a.department);
+  const priorityB = getAffiliationPriority(b.affiliation, b.department);
+
+  // 1순위: 지정된 소속 순서 가중치 비교
+  if (priorityA !== priorityB) {
+    return priorityA - priorityB;
   }
 
-  // 2순위: 권한 레벨 순서 (숫자가 낮을수록 상위 권한: 0 -> 1 -> 2 -> 3)
+  // 가중치가 동일한 소속 내부라면 문자열 가나다순 정렬 보완
+  const affA = (a.affiliation || a.department || '').trim();
+  const affB = (b.affiliation || b.department || '').trim();
+  const affCmp = affA.localeCompare(affB, 'ko', { numeric: true, sensitivity: 'base' });
+  if (affCmp !== 0) {
+    return affCmp;
+  }
+
+  // 2순위: 권한 레벨 순서 비교 (숫자가 낮을수록 상위 권한: 0 -> 1 -> 2 -> 3)
   const levelA = Number.isFinite(a.level) ? a.level : 2;
   const levelB = Number.isFinite(b.level) ? b.level : 2;
   if (levelA !== levelB) {
