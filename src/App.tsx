@@ -2448,4 +2448,3 @@ export default function App() {
     </div>
   );
 }
-```[cite: 14]
