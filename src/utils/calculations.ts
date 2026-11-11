@@ -382,37 +382,30 @@ export function compareItemsByDefaultOrder<
 }
 
 /**
- * [계정 관리] 사용자 계정 기본 정렬 함수
- * - 1순위: 소속 공장 기준 (포승공장이 아산공장보다 먼저 오도록 정렬)
- * - 2순위: 각 공장 내부의 소속 라인명(SL1, SL2, 공용/포장/출하, 관리팀, 포승공장 등) 기준 가나다순(오름차순) 정렬
- * - 3순위: 세부 부서명 및 사용자 이름 가나다순 정렬
+ * [계정 관리] 사용자 계정 정렬 함수 (소속 > 권한 레벨순)
+ * - 1순위: 소속 공장/라인 기준 정렬 (포승공장, SL1, SL2, 공용, 아산공장 등)
+ * - 2순위: 권한 레벨 순서 (LV.0 최고관리자 -> LV.1 현장관리자 -> LV.2 현장사용자 -> LV.3 사무실사용자 순)
+ * - 3순위: 사용자 이름 가나다순 정렬
  */
 export function compareUserAccountsByAffiliation(a: UserAccount, b: UserAccount): number {
   const affA = (a.affiliation || a.department || '포승공장').trim();
   const affB = (b.affiliation || b.department || '포승공장').trim();
-  const deptA = (a.department || affA).trim();
-  const deptB = (b.department || affB).trim();
 
-  // 1순위: 소속 공장 판별 (포승공장 = 1, 아산공장 = 2)
-  const isAsanA = affA.includes('아산') || deptA.includes('아산');
-  const isAsanB = affB.includes('아산') || deptB.includes('아산');
-  const factoryRankA = isAsanA ? 2 : 1;
-  const factoryRankB = isAsanB ? 2 : 1;
-
-  if (factoryRankA !== factoryRankB) {
-    return factoryRankA - factoryRankB;
-  }
-
-  // 2순위: 각 공장 내부의 소속 라인명(SL1, SL2, 공용, 관리팀, 포승공장 등) 가나다/오름차순 정렬
+  // 1순위: 소속 기준 오름차순 정렬 (가나다순)
   const lineCmp = affA.localeCompare(affB, 'ko', { numeric: true, sensitivity: 'base' });
   if (lineCmp !== 0) {
     return lineCmp;
   }
 
-  // 3순위: 동일 소속 라인 내 세부 부서(포장, 출하 등) 가나다순 정렬
-  const deptCmp = deptA.localeCompare(deptB, 'ko', { numeric: true, sensitivity: 'base' });
-  if (deptCmp !== 0) {
-    return deptCmp;
+  // 2순위: 권한 레벨 순서 (숫자가 낮을수록 상위 권한: 0 -> 1 -> 2 -> 3)
+  const levelA = Number.isFinite(a.level) ? a.level : 2;
+  const levelB = Number.isFinite(b.level) ? b.level : 2;
+  if (levelA !== levelB) {
+    return levelA - levelB;
+  }
+
+  // 3순위: 사용자 이름(수령자명) 가나다순 정렬
+  return (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true });   
   }
 
   // 4순위: 사용자 이름(수령자명) 가나다순 정렬
