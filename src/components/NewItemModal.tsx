@@ -54,6 +54,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
   const [deliveryDetailLocation, setDeliveryDetailLocation] = useState<string>('');
 
   // Synchronize form states whenever modal opens or editingItem changes
+  // 의존성 배열에서 categories, vendors를 제거하여 타이핑 중 부모 리렌더링으로 인한 리셋 방지
   useEffect(() => {
     if (!isOpen) return;
 
@@ -109,7 +110,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
       setReceiverPhone('');
       setDeliveryDetailLocation('');
     }
-  }, [isOpen, editingItem, categories, vendors]);
+  }, [isOpen, editingItem]);
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const isCategoryQtyBased = selectedCategory?.orderPolicyType === 'QTY_BASED';
@@ -496,7 +497,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
-                수령자(담당자) 지정 &amp; 납품장소 ([계정 관리] 연동)
+                수령자(담당자) 지정 & 납품장소 ([계정 관리] 연동)
               </span>
               <span className="text-[11px] text-slate-500">
                 [계정 관리]에 등록된 사용자 목록에서 수령 담당자를 선택합니다.
