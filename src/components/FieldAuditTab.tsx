@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CalculatedItem, Category, ProductionLine, UserAccount } from '../types';
 import {
   formatNumber,
@@ -100,8 +100,13 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     ''
   );
 
-  // '모든 카테고리' 드롭다운부터 하단 알림 영역까지의 토글 상태 (디폴트 닫힘 상태)
-  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
+  // 모바일 디폴트 히든, PC(1024px 이상) 디폴트 펼침 처리
+  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
 
   // Sorting state: default is fixed '라인 > 카테고리 > 품목명' (절대 실사 입력 중 행 점프 없음)
   const [sortField, setSortField] = useUrlPersistedState<'default' | 'remainingDays' | 'itemName'>(
@@ -248,7 +253,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
 
     onReceiveStock(item.id, beforeStock, incomingQty);
 
-    // Clear draft for this item so it reflects the freshly received stock
     setDraftStocks((prev) => {
       const next = { ...prev };
       delete next[item.id];
@@ -304,15 +308,11 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     (i) => i.orderStatus === '발주완료(입고대기)'
   ).length;
   const totalAuditDelayedCount = items.filter((i) => i.isAuditDelayed).length;
-  const totalNeededCount = items.filter((i) => i.needsOrder).length;
-  const totalImminentCount = items.filter((i) => i.isOrderImminent).length;
 
-  // Helper: check if an item belongs to a specific UserAccount
   const doesItemMatchAccount = (item: CalculatedItem, acc: UserAccount) => {
     return checkItemAssignedToUser(item, acc);
   };
 
-  // 최상위 관리자 계정 여부 판별 (Level 0 또는 admin)
   const isTopAdminUser = useMemo(() => {
     if (!currentUser) return true;
     if (currentUser.level === 0 || currentUser.username === 'admin') return true;
@@ -320,7 +320,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     return false;
   }, [currentUser]);
 
-  // 현재 로그인한 사용자가 해당 품목 행의 실사 수량 입력 및 입고확정을 조작할 수 있는지 판별
   const canUserEditItem = (item: CalculatedItem): boolean => {
     if (!currentUser) return true;
     if (isTopAdminUser) return true;
@@ -329,7 +328,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     return checkItemAssignedToUser(item, currentUser);
   };
 
-  // Simple receiver options from registered userAccounts
   const receiverOptions = useMemo(() => {
     return userAccounts
       .filter((u) => u.isActive !== false)
@@ -355,7 +353,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     ).length;
   }, [items]);
 
-  // Helper to get formatted receiver label for a single item (품목 자체 지정값 우선 반영)
   const getItemReceiverDisplay = (item: CalculatedItem): string | null => {
     if (item.receiverName && item.receiverName.trim()) {
       if (item.receiverName.includes('[')) {
@@ -382,7 +379,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     if (selectedCategory !== '전체' && item.categoryId !== selectedCategory)
       return false;
 
-    // Simple receiver filter
     if (selectedReceiver !== '전체') {
       if (selectedReceiver === '미지정') {
         const isUnassigned =
@@ -426,7 +422,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     return true;
   });
 
-  // Sort items: 기본 정렬은 무조건 고정 순서 (라인 > 카테고리 > 품목명)
   const sortedItems = [...filteredItems].sort((a, b) => {
     if (sortField === 'default') {
       return compareItemsByDefaultOrder(a, b);
@@ -445,7 +440,6 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     return sortAsc ? cmp : -cmp;
   });
 
-  // Line Filter definitions
   const LINE_FILTERS = [
     { key: '전체', label: '전체', count: items.length },
     {
@@ -575,7 +569,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
         </button>
       </div>
 
-      {/* 토글로 여닫을 수 있는 상세 필터 및 공지 영역 (isFilterExpanded가 true일 때만 노출) */}
+      {/* 토글로 여닫을 수 있는 상세 필터 및 공지 영역 (PC는 디폴트 열림, 모바일은 디폴트 닫힘) */}
       {isFilterExpanded && (
         <div className="space-y-3 animate-in fade-in zoom-in-98 duration-150">
           <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
