@@ -111,13 +111,14 @@ export const Header: React.FC<HeaderProps> = ({
           : 'bg-slate-900 border-b border-slate-800'
       } text-white sticky top-0 z-40 shadow-sm no-print transition-colors`}
     >
-      <div className="w-full max-w-[1920px] mx-auto px-3 sm:px-5">
+      <div className="w-full max-w-[1920px] mx-auto px-2 sm:px-5">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between lg:h-15 py-2 lg:py-0 gap-2 lg:gap-3">
+          
           {/* Zone 1: Brand Logo & Title + Mobile Quick Controls */}
           <div className="flex items-center justify-between w-full lg:w-auto gap-2 shrink-0">
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm sm:text-base tracking-wider shadow-inner shrink-0 ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-black text-xs sm:text-base tracking-wider shadow-inner shrink-0 ${
                   isEffectiveWorkerView
                     ? 'bg-amber-500 text-slate-950'
                     : 'bg-blue-600 text-white'
@@ -127,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm sm:text-[15px] font-extrabold tracking-tight text-white whitespace-nowrap">
+                  <span className="text-xs sm:text-[15px] font-extrabold tracking-tight text-white whitespace-nowrap">
                     대성스틸 스마트 자재·소모품 관리
                   </span>
                   {isEffectiveWorkerView && (
@@ -144,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Mobile Controls (< lg) */}
+            {/* Mobile Controls (< lg): 화면 좁을 때 우측 상단에 배치되는 간소화 컨트롤 */}
             <div className="flex items-center gap-1.5 lg:hidden shrink-0 flex-wrap justify-end">
               {currentUser && (
                 <div className="flex items-center gap-1 bg-slate-800/90 border border-slate-700 px-2 py-1 rounded-lg text-[11px]">
@@ -178,7 +179,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {userLevel === 0 && (
+              {userLevel === 0 && !isEffectiveWorkerView && (
                 <button
                   onClick={onOpenNewItemModal}
                   className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 rounded-lg shadow-xs transition-colors whitespace-nowrap cursor-pointer"
@@ -188,17 +189,28 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
+              {onRefreshCloudData && (
+                <button
+                  type="button"
+                  onClick={onRefreshCloudData}
+                  disabled={isCloudSyncing}
+                  className="p-1.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
+                  title="클라우드 DB 새로고침"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin text-emerald-400' : ''}`} />
+                </button>
+              )}
+
               {currentUser?.level === 0 && onOpenDbConfig && (
                 <button
                   type="button"
                   onClick={onOpenDbConfig}
-                  className={`relative p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
                     isDbConnected
-                      ? 'bg-emerald-950/70 border-emerald-700/80 text-emerald-400 hover:bg-emerald-900'
-                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                      ? 'bg-emerald-950/70 border-emerald-700 text-emerald-400'
+                      : 'bg-slate-800 border-slate-700 text-slate-300'
                   }`}
-                  title="Supabase 클라우드 DB 환경설정 (LV.0 최고관리자 전용)"
-                  aria-label="Supabase DB 환경설정"
+                  title="Supabase DB 환경설정"
                 >
                   <Database className="w-3.5 h-3.5" />
                 </button>
@@ -208,7 +220,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-rose-200 hover:text-white bg-rose-950/70 hover:bg-rose-700 border border-rose-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-rose-200 hover:text-white bg-rose-950/70 border border-rose-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
                   title="로그아웃"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -218,10 +230,9 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Zone 2: Center Main Navigation Tabs */}
+          {/* Zone 2: Center Main Navigation Tabs (가로 스크롤 적용으로 찌그러짐 방지) */}
           {isEffectiveWorkerView ? (
-            /* LV.1 현장사용자 또는 현장 작업자 간소화 모드: 현장 중심 2개 탭 */
-            <nav className="grid grid-cols-2 lg:flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto pb-1 lg:pb-0">
+            <nav className="grid grid-cols-2 lg:flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto pb-1 lg:pb-0 overflow-x-auto no-scrollbar">
               <button
                 onClick={() => onTabChange('field-audit')}
                 className={`flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-black rounded-xl transition-all whitespace-nowrap cursor-pointer ${
@@ -231,7 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <ClipboardCheck className="w-4 h-4 shrink-0" />
-                <span>현장 실사 &amp; 입고 확정</span>
+                <span>현장 실사 & 입고 확정</span>
                 {awaitingArrivalCount > 0 && (
                   <span className="bg-rose-600 text-white text-[11px] font-black px-1.5 py-0.2 rounded-full tabular-nums">
                     입고 {awaitingArrivalCount}
@@ -262,8 +273,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </nav>
           ) : (
-            /* LV.0 최고관리자 (5개 탭) 및 LV.2 사무실관리자 (4개 탭) */
-            <nav className="flex items-center gap-1 xl:gap-1.5 overflow-x-auto lg:overflow-visible no-scrollbar pb-1 lg:pb-0 -mx-3 px-3 lg:mx-0 lg:px-0 w-full lg:w-auto justify-start lg:justify-center">
+            <nav className="flex items-center gap-1 xl:gap-1.5 overflow-x-auto no-scrollbar pb-1 lg:pb-0 -mx-2 px-2 lg:mx-0 lg:px-0 w-full lg:w-auto justify-start lg:justify-center whitespace-nowrap">
               <button
                 onClick={() => onTabChange('dashboard')}
                 className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 text-xs xl:text-[13px] font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
@@ -291,7 +301,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   <ClipboardCheck className="w-3.5 h-3.5 xl:w-4 xl:h-4 shrink-0" />
-                  <span>현장 실사 &amp; 입고</span>
+                  <span>현장 실사 & 입고</span>
                   {awaitingArrivalCount > 0 && (
                     <span className="bg-amber-500 text-slate-950 text-[10px] font-bold px-1.5 py-0.2 rounded-full tabular-nums">
                       {awaitingArrivalCount}
@@ -372,9 +382,8 @@ export const Header: React.FC<HeaderProps> = ({
             </nav>
           )}
 
-          {/* Zone 3: Compact Desktop Controls + Profile Chip + Logout */}
+          {/* Zone 3: Desktop Controls + Profile Chip + Logout (PC 화면 전용) */}
           <div className="hidden lg:flex items-center gap-1.5 xl:gap-2 shrink-0">
-            {/* Worker Mode Toggle Switch */}
             {onToggleWorkerMode && userLevel !== 2 && userLevel !== 3 && (
               <button
                 type="button"
@@ -424,7 +433,6 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
 
-            {/* Compact Profile Chip & Logout */}
             {currentUser && (
               <div className="flex items-center gap-1.5 pl-1.5 ml-0.5 border-l border-slate-700/80">
                 <div
@@ -451,7 +459,6 @@ export const Header: React.FC<HeaderProps> = ({
                     disabled={isCloudSyncing}
                     className="p-1.5 rounded-lg border bg-slate-800/90 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer disabled:opacity-50"
                     title="Supabase 클라우드 DB 최신 라이브 데이터 새로고침"
-                    aria-label="클라우드 DB 새로고침"
                   >
                     <RefreshCw className={`w-4 h-4 shrink-0 ${isCloudSyncing ? 'animate-spin text-emerald-400' : ''}`} />
                   </button>
@@ -466,8 +473,7 @@ export const Header: React.FC<HeaderProps> = ({
                         ? 'bg-emerald-950/70 border-emerald-700/80 text-emerald-400 hover:bg-emerald-900'
                         : 'bg-slate-800/90 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
                     }`}
-                    title="Supabase 클라우드 DB 환경설정 (LV.0 최고관리자 전용)"
-                    aria-label="Supabase DB 환경설정"
+                    title="Supabase 클라우드 DB 환경설정"
                   >
                     <Database className="w-4 h-4 shrink-0" />
                   </button>
@@ -487,6 +493,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
           </div>
+
         </div>
       </div>
 
@@ -505,7 +512,7 @@ export const Header: React.FC<HeaderProps> = ({
                       {currentUser ? getCompactProfileLabel(currentUser) : '현장사용자'}
                     </strong>{' '}
                     권한으로 접속 중입니다. 불필요한 사무실 메뉴가 숨겨지며{' '}
-                    <strong>[현장 실사 &amp; 입고 확정]</strong> 및{' '}
+                    <strong>[현장 실사 & 입고 확정]</strong> 및{' '}
                     <strong>[통합 모니터링(읽기 전용)]</strong>만 활성화됩니다.
                   </>
                 ) : (
