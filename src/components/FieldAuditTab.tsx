@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CalculatedItem, Category, ProductionLine, UserAccount } from '../types';
 import {
   formatNumber,
@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 interface FieldAuditTabProps {
+  onOpenNewItemModal?: () => void;
   items: CalculatedItem[];
   categories: Category[];
   userAccounts?: UserAccount[];
@@ -48,6 +49,7 @@ interface FieldAuditTabProps {
 }
 
 export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
+  onOpenNewItemModal,
   items,
   categories,
   userAccounts = [],
@@ -100,7 +102,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
     ''
   );
 
-  // 모바일 디폴트 히든, PC(1024px 이상) 디폴트 펼침 처리
+  // 화면 너비 기반: PC(1024px 이상)는 디폴트 펼침, 모바일은 디폴트 히든(접힘) 처리
   const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 1024;
@@ -569,25 +571,38 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
         </button>
       </div>
 
-      {/* 토글로 여닫을 수 있는 상세 필터 및 공지 영역 (PC는 디폴트 열림, 모바일은 디폴트 닫힘) */}
+      {/* 토글로 여닫을 수 있는 상세 필터 및 공지 영역 */}
       {isFilterExpanded && (
         <div className="space-y-3 animate-in fade-in zoom-in-98 duration-150">
           <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
             {/* Category & Receiver Filters */}
             <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-              <div className="w-full sm:w-48">
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full text-xs font-semibold border border-slate-300 rounded-md py-1.5 px-2 bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 whitespace-nowrap shadow-2xs"
-                >
-                  <option value="전체">모든 카테고리 (전체 {categories.length}종)</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+              {/* '모든 카테고리' 드롭다운 바로 우측에 '신규 품목 등록' 버튼 배치 */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="w-full sm:w-48">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full text-xs font-semibold border border-slate-300 rounded-md py-1.5 px-2 bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 whitespace-nowrap shadow-2xs"
+                  >
+                    <option value="전체">모든 카테고리 (전체 {categories.length}종)</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {onOpenNewItemModal && (currentUser?.level ?? 0) === 0 && (
+                  <button
+                    type="button"
+                    onClick={onOpenNewItemModal}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-md shadow-xs transition-colors whitespace-nowrap cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>신규 품목 등록</span>
+                  </button>
+                )}
               </div>
 
               <div className="relative flex items-center w-full sm:w-56">
