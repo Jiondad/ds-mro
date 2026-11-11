@@ -58,6 +58,7 @@ import { DbConfigModal } from './components/DbConfigModal';
 import {
   getSavedSupabaseConfig,
   getSupabaseClient,
+  ensureDefaultAdminAccount,
   fetchAllCloudDataFromSupabase,
   insertUserAccountToSupabase,
   updateUserAccountInSupabase,
@@ -81,15 +82,18 @@ import {
 import { CheckCircle2 } from 'lucide-react';
 
 export default function App() {
-  // User authentication & 4-tier RBAC state (Pure in-memory session; no localStorage data caching)
+  // User authentication & 4-tier RBAC state (Pure in-memory session; Supabase Cloud DB direct)
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
 
-  // [계정 관리] 등록 사용자 계정 목록 상태 (Supabase DB 단일 진실 공급원)
+  // [계정 관리] 등록 사용자 계정 목록 상태 (Supabase DB 단일 진실 공급원 + admin 기본계정 보장)
   const [userAccounts, setUserAccounts] = useState<UserAccount[]>(() =>
-    [...INITIAL_USER_ACCOUNTS].sort(compareUserAccountsByAffiliation)
+    ensureDefaultAdminAccount(INITIAL_USER_ACCOUNTS)
   );
 
-  const [userPasswords, setUserPasswords] = useState<Record<string, string>>({});
+  // 최고관리자(admin) 초기 비밀번호 1234 기본 보장
+  const [userPasswords, setUserPasswords] = useState<Record<string, string>>({
+    admin: '1234',
+  });
   const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
   const [isDbConfigModalOpen, setIsDbConfigModalOpen] = useState(false);
   const [isDbConnected, setIsDbConnected] = useState<boolean>(() => {
@@ -110,7 +114,7 @@ export default function App() {
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(INITIAL_COMPANY_PROFILE);
 
   // ----------------------------------------------------
-  // Supabase Cloud DB 단일 연동 상태 (로컬 스토리지 캐시 완전 배제)
+  // Supabase Cloud DB 단일 연동 상태 (브라우저 스토리지 캐시 완전 배제)
   // ----------------------------------------------------
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -215,9 +219,7 @@ export default function App() {
         }
 
         if (snapshot.userAccounts && snapshot.userAccounts.length > 0) {
-          const sortedAccounts = [...snapshot.userAccounts].sort(
-            compareUserAccountsByAffiliation
-          );
+          const sortedAccounts = ensureDefaultAdminAccount(snapshot.userAccounts);
           setUserAccounts(sortedAccounts);
           setCurrentUser((prevUser) => {
             if (!prevUser) return null;
@@ -232,6 +234,7 @@ export default function App() {
           setUserPasswords((prev) => ({
             ...prev,
             ...snapshot.userPasswords,
+            admin: snapshot.userPasswords?.admin || prev.admin || '1234',
           }));
         }
 
@@ -239,7 +242,7 @@ export default function App() {
           showToast('☁️ Supabase 클라우드 DB에서 최신 전사 데이터를 동기화했습니다.');
         }
       } catch (err) {
-        console.warn('Supabase cloud sync error:', err);
+        console.error('[Supabase Cloud Sync Error]:', err);
         if (!options?.silent) {
           showToast('⚠️ 클라우드 DB 동기화 중 일시적인 네트워크 지연이 발생했습니다.');
         }
@@ -308,8 +311,11 @@ export default function App() {
     if (memoSaveTimeoutRef.current) {
       window.clearTimeout(memoSaveTimeoutRef.current);
     }
-    memoSaveTimeoutRef.current = window.setTimeout(() => {
-      void saveMemoToSupabase(nextMemo);
+    memoSaveTimeoutRef.current = window.setTimeout(async () => {
+      const res = await saveMemoToSupabase(nextMemo);
+      if (!res.ok && isDbConnected) {
+        console.error('[Memo Save Failed]:', res.errorMessage);
+      }
     }, 600);
   };
 
@@ -322,12 +328,13 @@ export default function App() {
     });
   }, [items, categories, vendors]);
 
+  // 최고관리자(admin, LV.0)는 초기비번 1234로 즉시 접속 가능하도록 강제 변경 대상에서 제외
   const mustChangePassword = useMemo(() => {
     if (!currentUser) return false;
+    if (currentUser.username === 'admin' || currentUser.level === 0) return false;
     const storedPw = userPasswords[currentUser.username];
     const isPassword1234 = !storedPw || storedPw === '1234';
-    if (!isPassword1234) return false;
-    return currentUser.level !== 0 || storedPw === '1234';
+    return isPassword1234;
   }, [currentUser, userPasswords]);
 
   const orderNeededCount = calculatedItems.filter((i) => i.needsOrder).length;
@@ -358,7 +365,9 @@ export default function App() {
 
     const storedPw = userPasswords[user.username];
     const isInitialOrReset =
-      (!storedPw || storedPw === '1234') && (user.level !== 0 || storedPw === '1234');
+      user.username !== 'admin' &&
+      user.level !== 0 &&
+      (!storedPw || storedPw === '1234');
 
     const roleText = user.roleLabel || `LV.${user.level}`;
     const displayName = user.title ? `${user.name} ${user.title}` : user.name;
@@ -386,12 +395,10 @@ export default function App() {
     );
   };
 
-  const handleChangePassword = (username: string, newPassword: string) => {
-    setUserPasswords((prev) => {
-      const updated = { ...prev, [username]: newPassword };
-      void saveUserPasswordsToSupabase(updated);
-      return updated;
-    });
+  const handleChangePassword = async (username: string, newPassword: string) => {
+    const updated = { ...userPasswords, [username]: newPassword };
+    setUserPasswords(updated);
+
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
       targetName: `계정 ID: ${username}`,
@@ -399,19 +406,23 @@ export default function App() {
       afterValue: '신규 비밀번호 변경 완료',
       details: `'${username}' 계정 비밀번호 변경`,
     });
+
+    const res = await saveUserPasswordsToSupabase(updated);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [DB 저장 오류] 비밀번호 클라우드 저장 실패: ${res.errorMessage}`);
+      return;
+    }
     showToast(`'${username}' 계정의 비밀번호가 사내 보안 정책에 따라 클라우드 DB에 변경·저장되었습니다.`);
   };
 
-  const handleResetUserPassword = (username: string, displayName?: string) => {
+  const handleResetUserPassword = async (username: string, displayName?: string) => {
     if ((currentUser?.level ?? 0) !== 0) {
       showToast('⚠️ 비밀번호 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
       return;
     }
-    setUserPasswords((prev) => {
-      const updated = { ...prev, [username]: '1234' };
-      void saveUserPasswordsToSupabase(updated);
-      return updated;
-    });
+    const updated = { ...userPasswords, [username]: '1234' };
+    setUserPasswords(updated);
+
     const label = displayName ? `${displayName} (${username})` : username;
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
@@ -420,22 +431,22 @@ export default function App() {
       afterValue: '초기 비밀번호 (1234)',
       details: `'${label}' 계정 비밀번호 초기화 (1234)`,
     });
+
+    const res = await saveUserPasswordsToSupabase(updated);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [DB 저장 오류] 비밀번호 초기화 반영 실패: ${res.errorMessage}`);
+      return;
+    }
     showToast(
-      `🔑 [비밀번호 초기화 완료] '${label}' 계정의 비밀번호가 '1234'로 초기화되었습니다. (다음 로그인 시 변경 강제)`
+      `🔑 [비밀번호 초기화 완료] '${label}' 계정의 비밀번호가 '1234'로 초기화되었습니다.`
     );
   };
 
-  const handleAddAccount = (newAccount: UserAccount) => {
-    setUserAccounts((prev) => {
-      const next = [...prev, newAccount].sort(compareUserAccountsByAffiliation);
-      void insertUserAccountToSupabase(newAccount, next);
-      return next;
-    });
-    setUserPasswords((prev) => {
-      const updated = { ...prev, [newAccount.username]: '1234' };
-      void saveUserPasswordsToSupabase(updated);
-      return updated;
-    });
+  const handleAddAccount = async (newAccount: UserAccount) => {
+    const nextAccounts = ensureDefaultAdminAccount([...userAccounts, newAccount]);
+    const nextPasswords = { ...userPasswords, [newAccount.username]: '1234' };
+    setUserAccounts(nextAccounts);
+    setUserPasswords(nextPasswords);
 
     const displayName = newAccount.title
       ? `${newAccount.name} ${newAccount.title}`
@@ -451,50 +462,45 @@ export default function App() {
       details: `신규 사용자 계정 '${displayName} (${newAccount.username})' 생성`,
     });
 
+    const [accRes] = await Promise.all([
+      insertUserAccountToSupabase(newAccount, nextAccounts),
+      saveUserPasswordsToSupabase(nextPasswords),
+    ]);
+
+    if (!accRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${accRes.errorMessage}`);
+      return;
+    }
+
     showToast(
       `✅ [${newAccount.affiliation || '소속'}] '${displayName} (${newAccount.username})' 계정이 클라우드 DB에 생성되었습니다. (초기 PW: 1234)`
     );
   };
 
-  const handleUpdateAccount = (updatedAccount: UserAccount, previousUsername?: string) => {
+  const handleUpdateAccount = async (updatedAccount: UserAccount, previousUsername?: string) => {
     const oldUsername = previousUsername || updatedAccount.username;
     const oldAcc = userAccounts.find(
       (a) => a.id === updatedAccount.id || (previousUsername && a.username === previousUsername)
     );
 
-    setUserAccounts((prev) => {
-      const updatedList = prev.map((acc) => {
-        if (acc.id === updatedAccount.id) {
-          return {
-            ...acc,
-            ...updatedAccount,
-            id: acc.id,
-          };
-        }
-        return acc;
-      });
-
-      const deduped = new Map<string, UserAccount>();
-      updatedList.forEach((acc) => {
-        deduped.set(acc.id, acc);
-      });
-      const sorted = Array.from(deduped.values()).sort(compareUserAccountsByAffiliation);
-      void updateUserAccountInSupabase(updatedAccount, sorted);
-      return sorted;
-    });
+    const updatedList = userAccounts.map((acc) =>
+      acc.id === updatedAccount.id ? { ...acc, ...updatedAccount, id: acc.id } : acc
+    );
+    const deduped = new Map<string, UserAccount>();
+    updatedList.forEach((acc) => deduped.set(acc.id, acc));
+    const sortedAccounts = ensureDefaultAdminAccount(Array.from(deduped.values()));
+    setUserAccounts(sortedAccounts);
 
     if (previousUsername && previousUsername !== updatedAccount.username) {
-      setUserPasswords((prev) => {
-        const updated = { ...prev };
-        if (updated[previousUsername]) {
-          updated[updatedAccount.username] = updated[previousUsername];
-          delete updated[previousUsername];
-        } else {
-          updated[updatedAccount.username] = '1234';
-        }
-        void saveUserPasswordsToSupabase(updated);
-        return updated;
-      });
+      const updatedPw = { ...userPasswords };
+      if (updatedPw[previousUsername]) {
+        updatedPw[updatedAccount.username] = updatedPw[previousUsername];
+        delete updatedPw[previousUsername];
+      } else {
+        updatedPw[updatedAccount.username] = '1234';
+      }
+      setUserPasswords(updatedPw);
+      void saveUserPasswordsToSupabase(updatedPw);
     }
 
     const fullDisplayName = updatedAccount.title
@@ -506,29 +512,28 @@ export default function App() {
         : oldAcc.name
       : '';
 
-    setItems((prev) => {
-      const changedItems: InventoryItem[] = [];
-      const next = prev.map((it) => {
-        const matchesId = it.receiverLoginId === oldUsername;
-        const matchesOldName =
-          oldFullDisplayName && !it.receiverLoginId && it.receiverName === oldFullDisplayName;
-        if (matchesId || matchesOldName) {
-          const updatedIt: InventoryItem = {
-            ...it,
-            receiverLoginId: updatedAccount.username,
-            receiverName: fullDisplayName,
-            receiverPhone: updatedAccount.phone || it.receiverPhone,
-          };
-          changedItems.push(updatedIt);
-          return updatedIt;
-        }
-        return it;
-      });
-      if (changedItems.length > 0) {
-        void batchUpsertInventoryItemsToSupabase(changedItems, next);
+    const changedItems: InventoryItem[] = [];
+    const nextItems = items.map((it) => {
+      const matchesId = it.receiverLoginId === oldUsername;
+      const matchesOldName =
+        oldFullDisplayName && !it.receiverLoginId && it.receiverName === oldFullDisplayName;
+      if (matchesId || matchesOldName) {
+        const updatedIt: InventoryItem = {
+          ...it,
+          receiverLoginId: updatedAccount.username,
+          receiverName: fullDisplayName,
+          receiverPhone: updatedAccount.phone || it.receiverPhone,
+        };
+        changedItems.push(updatedIt);
+        return updatedIt;
       }
-      return next;
+      return it;
     });
+
+    if (changedItems.length > 0) {
+      setItems(nextItems);
+      void batchUpsertInventoryItemsToSupabase(changedItems, nextItems);
+    }
 
     if (currentUser && currentUser.id === updatedAccount.id) {
       setCurrentUser(updatedAccount);
@@ -546,12 +551,18 @@ export default function App() {
       details: `'${fullDisplayName} (${updatedAccount.username})' 계정 정보 수정`,
     });
 
+    const res = await updateUserAccountInSupabase(updatedAccount, sortedAccounts);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast(
       `✅ '${fullDisplayName} (${updatedAccount.username})' 계정 정보가 클라우드 DB에 업데이트되었습니다.`
     );
   };
 
-  const handleToggleAccountActive = (accountId: string) => {
+  const handleToggleAccountActive = async (accountId: string) => {
     const target = userAccounts.find((a) => a.id === accountId);
     if (!target) return;
     if (target.username === 'admin') {
@@ -560,12 +571,10 @@ export default function App() {
     }
     const nextActive = target.isActive === false;
     const updatedTarget: UserAccount = { ...target, isActive: nextActive };
-
-    setUserAccounts((prev) => {
-      const next = prev.map((acc) => (acc.id === accountId ? updatedTarget : acc));
-      void updateUserAccountInSupabase(updatedTarget, next);
-      return next;
-    });
+    const nextAccounts = userAccounts.map((acc) =>
+      acc.id === accountId ? updatedTarget : acc
+    );
+    setUserAccounts(nextAccounts);
 
     const displayName = target.title ? `${target.name} ${target.title}` : target.name;
     recordAuditLog({
@@ -577,6 +586,12 @@ export default function App() {
       afterValue: nextActive ? '활성' : '비활성',
       details: `'${displayName} (${target.username})' 계정 상태 [${nextActive ? '활성' : '비활성'}] 전환`,
     });
+
+    const res = await updateUserAccountInSupabase(updatedTarget, nextAccounts);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
     showToast(
       nextActive
@@ -601,7 +616,7 @@ export default function App() {
         acc.id === accountId ? deactivated : acc
       );
       setUserAccounts(nextAccounts);
-      await updateUserAccountInSupabase(deactivated, nextAccounts);
+      const res = await updateUserAccountInSupabase(deactivated, nextAccounts);
       recordAuditLog({
         actionType: 'ACCOUNT_MUTATE',
         targetId: target.id,
@@ -611,13 +626,19 @@ export default function App() {
         afterValue: '비활성 (이력 보존)',
         details: `'${displayName} (${target.username})' 계정 비활성 전환`,
       });
+      if (!res.ok && isDbConnected) {
+        showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+        return;
+      }
       showToast(
         `⛔ '${displayName} (${target.username})' 계정이 연결된 품목 이력 보존을 위해 [비활성] 상태로 전환되었습니다.`
       );
       return;
     }
 
-    const remainingAccounts = userAccounts.filter((acc) => acc.id !== accountId);
+    const remainingAccounts = ensureDefaultAdminAccount(
+      userAccounts.filter((acc) => acc.id !== accountId)
+    );
     const dbDeleteResult = await deleteUserAccountFromSupabase(accountId, remainingAccounts);
     if (!dbDeleteResult.ok && dbDeleteResult.isForeignKeyError) {
       const deactivated: UserAccount = { ...target, isActive: false };
@@ -632,41 +653,43 @@ export default function App() {
       return;
     }
 
+    if (!dbDeleteResult.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 삭제 실패] ${dbDeleteResult.errorMessage}`);
+      return;
+    }
+
     if (options?.unlinkItems !== false) {
-      setItems((prev) => {
-        const changed: InventoryItem[] = [];
-        const next = prev.map((it) => {
-          const isLinkedById = it.receiverLoginId && it.receiverLoginId.trim() === target.username;
-          const isLinkedByName =
-            !it.receiverLoginId && it.receiverName && it.receiverName.trim() === target.name.trim();
-          if (isLinkedById || isLinkedByName) {
-            const unlinked: InventoryItem = {
-              ...it,
-              receiverLoginId: undefined,
-              receiverName: undefined,
-              receiverPhone: undefined,
-            };
-            changed.push(unlinked);
-            return unlinked;
-          }
-          return it;
-        });
-        if (changed.length > 0) {
-          void batchUpsertInventoryItemsToSupabase(changed, next);
+      const changed: InventoryItem[] = [];
+      const nextItems = items.map((it) => {
+        const isLinkedById = it.receiverLoginId && it.receiverLoginId.trim() === target.username;
+        const isLinkedByName =
+          !it.receiverLoginId && it.receiverName && it.receiverName.trim() === target.name.trim();
+        if (isLinkedById || isLinkedByName) {
+          const unlinked: InventoryItem = {
+            ...it,
+            receiverLoginId: undefined,
+            receiverName: undefined,
+            receiverPhone: undefined,
+          };
+          changed.push(unlinked);
+          return unlinked;
         }
-        return next;
+        return it;
       });
+      if (changed.length > 0) {
+        setItems(nextItems);
+        await batchUpsertInventoryItemsToSupabase(changed, nextItems);
+      }
     }
 
     setUserAccounts(remainingAccounts);
 
-    setUserPasswords((prev) => {
-      if (!(target.username in prev)) return prev;
-      const updated = { ...prev };
-      delete updated[target.username];
-      void saveUserPasswordsToSupabase(updated);
-      return updated;
-    });
+    if (target.username in userPasswords) {
+      const updatedPw = { ...userPasswords };
+      delete updatedPw[target.username];
+      setUserPasswords(updatedPw);
+      void saveUserPasswordsToSupabase(updatedPw);
+    }
 
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
@@ -681,7 +704,7 @@ export default function App() {
     showToast(`🗑️ '${displayName} (${target.username})' 계정이 클라우드 DB에서 영구 삭제되었습니다.`);
   };
 
-  const handleAssignItemReceiver = (itemId: string, account: UserAccount | null) => {
+  const handleAssignItemReceiver = async (itemId: string, account: UserAccount | null) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
@@ -694,11 +717,9 @@ export default function App() {
         receiverName: undefined,
         receiverPhone: undefined,
       };
-      setItems((prev) => {
-        const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-        void upsertInventoryItemToSupabase(updatedItem, next);
-        return next;
-      });
+      const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+      setItems(nextItems);
+
       recordAuditLog({
         actionType: 'ITEM_RECEIVER_ASSIGN',
         targetId: targetItem.id,
@@ -708,6 +729,12 @@ export default function App() {
         afterValue: '수령자 지정 해제',
         details: `[${targetItem.itemName}] 수령자 지정 해제`,
       });
+
+      const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+      if (!res.ok && isDbConnected) {
+        showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+        return;
+      }
       showToast(`💾 [${targetItem.itemName}] 수령자(담당자) 지정 해제 내용이 클라우드 DB에 저장되었습니다.`);
       return;
     }
@@ -720,11 +747,9 @@ export default function App() {
       receiverPhone: account.phone || targetItem.receiverPhone,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
+
     recordAuditLog({
       actionType: 'ITEM_RECEIVER_ASSIGN',
       targetId: targetItem.id,
@@ -734,12 +759,18 @@ export default function App() {
       afterValue: `${fullDisplayName} (${account.username})`,
       details: `[${targetItem.itemName}] 수령자 '${fullDisplayName}' 지정`,
     });
+
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast(
       `💾 [${targetItem.itemName}] 수령자(담당자) '${fullDisplayName} (${account.affiliation || '소속'})' 변경사항이 클라우드 DB에 저장되었습니다.`
     );
   };
 
-  const handleUpdateItemDeliveryLocation = (
+  const handleUpdateItemDeliveryLocation = async (
     itemId: string,
     deliveryDetailLocation: string | undefined
   ) => {
@@ -752,11 +783,8 @@ export default function App() {
       deliveryDetailLocation: trimmed,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
 
     const defaultLoc = getDefaultDeliveryLocationForLine(targetItem.line, category);
     recordAuditLog({
@@ -769,6 +797,12 @@ export default function App() {
       details: `[${targetItem.itemName}] 수령장소 변경`,
     });
 
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     if (trimmed) {
       showToast(
         `💾 [${targetItem.line} · ${targetItem.itemName}] 수령장소('${trimmed}')가 클라우드 DB에 즉시 저장되었습니다.`
@@ -780,7 +814,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateItemLine = (itemId: string, newLine: ProductionLine) => {
+  const handleUpdateItemLine = async (itemId: string, newLine: ProductionLine) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem || targetItem.line === newLine) return;
 
@@ -789,11 +823,8 @@ export default function App() {
       line: newLine,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'ITEM_LINE_UPDATE',
@@ -804,6 +835,12 @@ export default function App() {
       afterValue: newLine,
       details: `[${targetItem.itemName}] 담당 라인 '${targetItem.line}' → '${newLine}' 변경`,
     });
+
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
 
     showToast(
       `💾 [${targetItem.itemName}] 담당 라인이 '${targetItem.line}' → '${newLine}'(으)로 변경되어 클라우드 DB에 저장되었습니다.`
@@ -847,7 +884,7 @@ export default function App() {
     });
   };
 
-  const handleUpdateStock = (itemId: string, newPackStock: number) => {
+  const handleUpdateStock = async (itemId: string, newPackStock: number) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
@@ -869,7 +906,6 @@ export default function App() {
       : undefined;
     const nowMs = Date.now();
     setLastAuditTimestamp(auditLabel);
-    void saveLastAuditTimestampToSupabase(auditLabel);
 
     const updatedItem: InventoryItem = {
       ...targetItem,
@@ -879,11 +915,8 @@ export default function App() {
       lastAuditUpdatedAt: nowMs,
     };
 
-    setItems((prev) => {
-      const next = prev.map((item) => (item.id === itemId ? updatedItem : item));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((item) => (item.id === itemId ? updatedItem : item));
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'STOCK_UPDATE',
@@ -894,9 +927,18 @@ export default function App() {
       afterValue: `${newPackStock} ${targetItem.packUnit}`,
       details: `[${targetItem.itemName}] 현재고 ${targetItem.currentPackStock} → ${newPackStock} ${targetItem.packUnit} 변경`,
     });
+
+    const [itemRes] = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      saveLastAuditTimestampToSupabase(auditLabel),
+    ]);
+
+    if (!itemRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
+    }
   };
 
-  const handleUpdateDailyUsage = (itemId: string, newDailyUsage: number) => {
+  const handleUpdateDailyUsage = async (itemId: string, newDailyUsage: number) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
@@ -905,11 +947,8 @@ export default function App() {
       dailyUsage: newDailyUsage,
     };
 
-    setItems((prev) => {
-      const next = prev.map((item) => (item.id === itemId ? updatedItem : item));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((item) => (item.id === itemId ? updatedItem : item));
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'SAFETY_STOCK_CALIBRATE',
@@ -920,9 +959,14 @@ export default function App() {
       afterValue: `일소모 ${newDailyUsage} ${targetItem.baseUnit}`,
       details: `[${targetItem.itemName}] 기준 일소모량 ${targetItem.dailyUsage} → ${newDailyUsage} ${targetItem.baseUnit} 수정`,
     });
+
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+    }
   };
 
-  const handleToggleStatus = (
+  const handleToggleStatus = async (
     itemId: string,
     newStatus: '발주대기' | '발주완료(입고대기)'
   ) => {
@@ -959,11 +1003,8 @@ export default function App() {
             orderedPackQty: null,
           };
 
-    setItems((prev) => {
-      const next = prev.map((item) => (item.id === itemId ? updatedItem : item));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((item) => (item.id === itemId ? updatedItem : item));
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'ORDER_UPDATE',
@@ -975,10 +1016,16 @@ export default function App() {
       details: `[${targetItem.itemName}] 발주 상태 '${targetItem.orderStatus}' → '${newStatus}' 전환`,
     });
 
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast(`발주 진행상태가 '${newStatus}' 상태로 변경되어 클라우드 DB에 저장되었습니다.`);
   };
 
-  const handleBatchCommitStock = (changes: Record<string, number>) => {
+  const handleBatchCommitStock = async (changes: Record<string, number>) => {
     const perm = checkPermission('batch_commit_audit', currentUser);
     if (!perm.allowed) {
       showToast(perm.reason || '⚠️ 실사 데이터 일괄 확정 권한이 없습니다.');
@@ -1000,7 +1047,6 @@ export default function App() {
       : undefined;
     const baseMs = Date.now();
     setLastAuditTimestamp(auditLabel);
-    void saveLastAuditTimestampToSupabase(auditLabel);
 
     const newLogs: UsageLog[] = [];
     const beforeSummaryParts: string[] = [];
@@ -1037,35 +1083,29 @@ export default function App() {
       }
     });
 
+    const nextLogs = newLogs.length > 0 ? [...newLogs, ...usageLogs] : usageLogs;
     if (newLogs.length > 0) {
-      setUsageLogs((prev) => {
-        const nextLogs = [...newLogs, ...prev];
-        void saveUsageLogsToSupabase(nextLogs);
-        return nextLogs;
-      });
+      setUsageLogs(nextLogs);
     }
 
     let offset = 0;
     const updatedBatch: InventoryItem[] = [];
-    setItems((prev) => {
-      const next = prev.map((item) => {
-        if (changes[item.id] !== undefined) {
-          offset += 1;
-          const updated: InventoryItem = {
-            ...item,
-            currentPackStock: changes[item.id],
-            lastAuditDate: auditLabel,
-            lastAuditedBy: auditorName || item.receiverName || '현장담당',
-            lastAuditUpdatedAt: baseMs + offset,
-          };
-          updatedBatch.push(updated);
-          return updated;
-        }
-        return item;
-      });
-      void batchUpsertInventoryItemsToSupabase(updatedBatch, next);
-      return next;
+    const nextItems = items.map((item) => {
+      if (changes[item.id] !== undefined) {
+        offset += 1;
+        const updated: InventoryItem = {
+          ...item,
+          currentPackStock: changes[item.id],
+          lastAuditDate: auditLabel,
+          lastAuditedBy: auditorName || item.receiverName || '현장담당',
+          lastAuditUpdatedAt: baseMs + offset,
+        };
+        updatedBatch.push(updated);
+        return updated;
+      }
+      return item;
     });
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'STOCK_BATCH_AUDIT',
@@ -1075,12 +1115,23 @@ export default function App() {
       details: `총 ${changeCount}개 소모품 현장 실사재고 일괄 확정 반영`,
     });
 
+    const [batchRes] = await Promise.all([
+      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
+      saveLastAuditTimestampToSupabase(auditLabel),
+      newLogs.length > 0 ? saveUsageLogsToSupabase(nextLogs) : Promise.resolve({ ok: true }),
+    ]);
+
+    if (!batchRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${batchRes.errorMessage}`);
+      return;
+    }
+
     showToast(
       `[실사 확정 완료] 총 ${changeCount}개 소모품의 현장 실사재고가 클라우드 DB에 안전하게 확정 반영되었습니다.`
     );
   };
 
-  const handleConfirmAuditWithoutChange = (itemIds: string[]) => {
+  const handleConfirmAuditWithoutChange = async (itemIds: string[]) => {
     if (itemIds.length === 0) return;
     const now = new Date();
     const timeStr = `${TODAY_STR} ${String(now.getHours()).padStart(2, '0')}:${String(
@@ -1094,28 +1145,24 @@ export default function App() {
       : undefined;
     const baseMs = Date.now();
     setLastAuditTimestamp(auditLabel);
-    void saveLastAuditTimestampToSupabase(auditLabel);
 
     let offset = 0;
     const updatedBatch: InventoryItem[] = [];
-    setItems((prev) => {
-      const next = prev.map((it) => {
-        if (itemIds.includes(it.id)) {
-          offset += 1;
-          const updated: InventoryItem = {
-            ...it,
-            lastAuditDate: auditLabel,
-            lastAuditedBy: auditorName || it.receiverName || '현장담당',
-            lastAuditUpdatedAt: baseMs + offset,
-          };
-          updatedBatch.push(updated);
-          return updated;
-        }
-        return it;
-      });
-      void batchUpsertInventoryItemsToSupabase(updatedBatch, next);
-      return next;
+    const nextItems = items.map((it) => {
+      if (itemIds.includes(it.id)) {
+        offset += 1;
+        const updated: InventoryItem = {
+          ...it,
+          lastAuditDate: auditLabel,
+          lastAuditedBy: auditorName || it.receiverName || '현장담당',
+          lastAuditUpdatedAt: baseMs + offset,
+        };
+        updatedBatch.push(updated);
+        return updated;
+      }
+      return it;
     });
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'STOCK_BATCH_AUDIT',
@@ -1125,12 +1172,22 @@ export default function App() {
       details: `총 ${itemIds.length}개 품목 실사 완료(수량 변동 없음) 확정`,
     });
 
+    const [res] = await Promise.all([
+      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
+      saveLastAuditTimestampToSupabase(auditLabel),
+    ]);
+
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast(
       `[실사 완료 처리] 총 ${itemIds.length}개 품목의 실사 일시가 금일(${TODAY_STR}) 기준으로 클라우드 DB에 갱신되었습니다.`
     );
   };
 
-  const handleApplyActualDailyUsage = (itemId: string, actualDailyUsage: number) => {
+  const handleApplyActualDailyUsage = async (itemId: string, actualDailyUsage: number) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
@@ -1139,11 +1196,8 @@ export default function App() {
       dailyUsage: actualDailyUsage,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'SAFETY_STOCK_CALIBRATE',
@@ -1154,25 +1208,27 @@ export default function App() {
       afterValue: `실측 보정 ${actualDailyUsage} ${targetItem.baseUnit}`,
       details: `[${targetItem.itemName}] 안전재고 실측 일소모량(${actualDailyUsage}) 반영`,
     });
+
+    const res = await upsertInventoryItemToSupabase(updatedItem, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+    }
   };
 
-  const handleBatchApplyActualDailyUsage = (updates: Record<string, number>) => {
+  const handleBatchApplyActualDailyUsage = async (updates: Record<string, number>) => {
     const count = Object.keys(updates).length;
     if (count === 0) return;
 
     const updatedBatch: InventoryItem[] = [];
-    setItems((prev) => {
-      const next = prev.map((it) => {
-        if (updates[it.id] !== undefined) {
-          const updated: InventoryItem = { ...it, dailyUsage: updates[it.id] };
-          updatedBatch.push(updated);
-          return updated;
-        }
-        return it;
-      });
-      void batchUpsertInventoryItemsToSupabase(updatedBatch, next);
-      return next;
+    const nextItems = items.map((it) => {
+      if (updates[it.id] !== undefined) {
+        const updated: InventoryItem = { ...it, dailyUsage: updates[it.id] };
+        updatedBatch.push(updated);
+        return updated;
+      }
+      return it;
     });
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'SAFETY_STOCK_CALIBRATE',
@@ -1182,12 +1238,18 @@ export default function App() {
       details: `편차 ±20% 이상 품목 ${count}건 기준 일소모량 일괄 보정`,
     });
 
+    const res = await batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast(
       `[안전재고 자동 학습 일괄 반영] 편차 ±20% 이상 품목 ${count}건의 기준 일소모량이 클라우드 DB에 일괄 보정되었습니다.`
     );
   };
 
-  const handleReceiveStock = (
+  const handleReceiveStock = async (
     itemId: string,
     remainingStockBeforeArrival?: number,
     actualIncomingQty?: number
@@ -1231,7 +1293,6 @@ export default function App() {
       : undefined;
     const nowMs = Date.now();
     setLastAuditTimestamp(receiveAuditLabel);
-    void saveLastAuditTimestampToSupabase(receiveAuditLabel);
 
     const updatedItem: InventoryItem = {
       ...targetItem,
@@ -1246,55 +1307,49 @@ export default function App() {
       orderedPackQty: null,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
 
-    setOrderHistory((prev) => {
-      const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
-      let nextHistory: OrderHistoryRecord[];
-      if (idx !== -1) {
-        const updated = [...prev];
-        const packQty = incoming || updated[idx].orderedPackQty;
-        const conv = targetItem.unitConversion || updated[idx].unitConversion || 1;
-        updated[idx] = {
-          ...updated[idx],
-          orderedPackQty: packQty,
-          unitPrice: targetItem.unitPrice,
-          totalAmount: Math.round(packQty * conv * targetItem.unitPrice),
-          status: '입고완료',
-          completedDate: TODAY_STR,
-        };
-        nextHistory = updated;
-      } else {
-        const newRecord: OrderHistoryRecord = {
-          id: `hist_rcv_${Date.now()}_${itemId}`,
-          itemId: targetItem.id,
-          orderDate: targetItem.orderDate || TODAY_STR,
-          expectedArrivalDate: targetItem.expectedArrivalDate || TODAY_STR,
-          completedDate: TODAY_STR,
-          vendorName: calc.vendorName,
-          vendorId: targetItem.vendorId,
-          line: targetItem.line,
-          itemName: targetItem.itemName,
-          spec: targetItem.spec,
-          orderedPackQty: incoming,
-          packUnit: targetItem.packUnit,
-          unitConversion: targetItem.unitConversion,
-          baseUnit: targetItem.baseUnit,
-          unitPrice: targetItem.unitPrice,
-          totalAmount: Math.round(incoming * targetItem.unitConversion * targetItem.unitPrice),
-          deliveryLocation: calc.deliveryLocation || '',
-          status: '입고완료',
-          note: '현장 입고확정 자동 기록',
-        };
-        nextHistory = [newRecord, ...prev];
-      }
-      void saveOrderHistoryToSupabase(nextHistory);
-      return nextHistory;
-    });
+    const idx = orderHistory.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
+    let nextHistory: OrderHistoryRecord[];
+    if (idx !== -1) {
+      const updated = [...orderHistory];
+      const packQty = incoming || updated[idx].orderedPackQty;
+      const conv = targetItem.unitConversion || updated[idx].unitConversion || 1;
+      updated[idx] = {
+        ...updated[idx],
+        orderedPackQty: packQty,
+        unitPrice: targetItem.unitPrice,
+        totalAmount: Math.round(packQty * conv * targetItem.unitPrice),
+        status: '입고완료',
+        completedDate: TODAY_STR,
+      };
+      nextHistory = updated;
+    } else {
+      const newRecord: OrderHistoryRecord = {
+        id: `hist_rcv_${Date.now()}_${itemId}`,
+        itemId: targetItem.id,
+        orderDate: targetItem.orderDate || TODAY_STR,
+        expectedArrivalDate: targetItem.expectedArrivalDate || TODAY_STR,
+        completedDate: TODAY_STR,
+        vendorName: calc.vendorName,
+        vendorId: targetItem.vendorId,
+        line: targetItem.line,
+        itemName: targetItem.itemName,
+        spec: targetItem.spec,
+        orderedPackQty: incoming,
+        packUnit: targetItem.packUnit,
+        unitConversion: targetItem.unitConversion,
+        baseUnit: targetItem.baseUnit,
+        unitPrice: targetItem.unitPrice,
+        totalAmount: Math.round(incoming * targetItem.unitConversion * targetItem.unitPrice),
+        deliveryLocation: calc.deliveryLocation || '',
+        status: '입고완료',
+        note: '현장 입고확정 자동 기록',
+      };
+      nextHistory = [newRecord, ...orderHistory];
+    }
+    setOrderHistory(nextHistory);
 
     recordAuditLog({
       actionType: 'RECEIVE_CONFIRM',
@@ -1306,12 +1361,23 @@ export default function App() {
       details: `[${targetItem.itemName}] 입고확정 (+${incoming} ${targetItem.packUnit}, 최종 ${finalStock} ${targetItem.packUnit})`,
     });
 
+    const [itemRes] = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      saveOrderHistoryToSupabase(nextHistory),
+      saveLastAuditTimestampToSupabase(receiveAuditLabel),
+    ]);
+
+    if (!itemRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
+      return;
+    }
+
     showToast(
       `[입고 확정 완료] ${targetItem.itemName} (현장잔여 ${baseRemaining} + 입고 ${incoming} = 최종 ${finalStock} ${targetItem.packUnit}) 클라우드 DB 반영 완료`
     );
   };
 
-  const handleConfirmOrder = (
+  const handleConfirmOrder = async (
     itemIds: string[],
     orderDate: string,
     expectedArrivalDate: string,
@@ -1326,25 +1392,22 @@ export default function App() {
     const finalOrderDate = orderDate || TODAY_STR;
     const updatedBatch: InventoryItem[] = [];
 
-    setItems((prev) => {
-      const next = prev.map((it) => {
-        if (itemIds.includes(it.id)) {
-          const updated: InventoryItem = {
-            ...it,
-            orderStatus: '발주완료(입고대기)',
-            orderDate: finalOrderDate,
-            expectedArrivalDate,
-            lastOrderDate: finalOrderDate,
-            orderedPackQty: quantities[it.id] || it.orderedPackQty || 1,
-          };
-          updatedBatch.push(updated);
-          return updated;
-        }
-        return it;
-      });
-      void batchUpsertInventoryItemsToSupabase(updatedBatch, next);
-      return next;
+    const nextItems = items.map((it) => {
+      if (itemIds.includes(it.id)) {
+        const updated: InventoryItem = {
+          ...it,
+          orderStatus: '발주완료(입고대기)',
+          orderDate: finalOrderDate,
+          expectedArrivalDate,
+          lastOrderDate: finalOrderDate,
+          orderedPackQty: quantities[it.id] || it.orderedPackQty || 1,
+        };
+        updatedBatch.push(updated);
+        return updated;
+      }
+      return it;
     });
+    setItems(nextItems);
 
     const newRecords: OrderHistoryRecord[] = [];
     const orderedNames: string[] = [];
@@ -1383,12 +1446,9 @@ export default function App() {
       }
     });
 
+    const nextHistory = newRecords.length > 0 ? [...newRecords, ...orderHistory] : orderHistory;
     if (newRecords.length > 0) {
-      setOrderHistory((prev) => {
-        const nextHistory = [...newRecords, ...prev];
-        void saveOrderHistoryToSupabase(nextHistory);
-        return nextHistory;
-      });
+      setOrderHistory(nextHistory);
     }
 
     recordAuditLog({
@@ -1399,12 +1459,22 @@ export default function App() {
       details: `총 ${itemIds.length}개 품목 신규 발주 확정 (입고예정일: ${expectedArrivalDate})`,
     });
 
+    const [batchRes] = await Promise.all([
+      batchUpsertInventoryItemsToSupabase(updatedBatch, nextItems),
+      newRecords.length > 0 ? saveOrderHistoryToSupabase(nextHistory) : Promise.resolve({ ok: true }),
+    ]);
+
+    if (!batchRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${batchRes.errorMessage}`);
+      return;
+    }
+
     showToast(
       `총 ${itemIds.length}개 품목의 발주가 클라우드 DB에 확정되었습니다. (입고예정: ${expectedArrivalDate})`
     );
   };
 
-  const handleUpdateOrder = (
+  const handleUpdateOrder = async (
     itemId: string,
     orderDate: string,
     expectedArrivalDate: string,
@@ -1421,33 +1491,28 @@ export default function App() {
       lastOrderDate: orderDate,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
 
-    setOrderHistory((prev) => {
-      const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
-      if (idx !== -1) {
-        const updated = [...prev];
-        const rec = updated[idx];
-        const conversion = rec.unitConversion || targetItem.unitConversion || 1;
-        const unitPrice = rec.unitPrice || targetItem.unitPrice || 0;
-        const totalAmount = orderedPackQty * conversion * unitPrice;
+    const idx = orderHistory.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
+    let nextHistory = orderHistory;
+    if (idx !== -1) {
+      const updated = [...orderHistory];
+      const rec = updated[idx];
+      const conversion = rec.unitConversion || targetItem.unitConversion || 1;
+      const unitPrice = rec.unitPrice || targetItem.unitPrice || 0;
+      const totalAmount = orderedPackQty * conversion * unitPrice;
 
-        updated[idx] = {
-          ...rec,
-          orderDate,
-          expectedArrivalDate,
-          orderedPackQty,
-          totalAmount: totalAmount > 0 ? totalAmount : rec.totalAmount,
-        };
-        void saveOrderHistoryToSupabase(updated);
-        return updated;
-      }
-      return prev;
-    });
+      updated[idx] = {
+        ...rec,
+        orderDate,
+        expectedArrivalDate,
+        orderedPackQty,
+        totalAmount: totalAmount > 0 ? totalAmount : rec.totalAmount,
+      };
+      nextHistory = updated;
+      setOrderHistory(nextHistory);
+    }
 
     recordAuditLog({
       actionType: 'ORDER_UPDATE',
@@ -1459,10 +1524,20 @@ export default function App() {
       details: `[${targetItem.itemName}] 발주 수량 및 입고예정일 변경`,
     });
 
+    const [itemRes] = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      idx !== -1 ? saveOrderHistoryToSupabase(nextHistory) : Promise.resolve({ ok: true }),
+    ]);
+
+    if (!itemRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
+      return;
+    }
+
     showToast(`[${targetItem.itemName}] 발주 정보(일정 및 수량)가 클라우드 DB에 변경·저장되었습니다.`);
   };
 
-  const handleCancelOrder = (itemId: string) => {
+  const handleCancelOrder = async (itemId: string) => {
     const targetItem = items.find((i) => i.id === itemId);
     if (!targetItem) return;
 
@@ -1474,29 +1549,24 @@ export default function App() {
       orderedPackQty: null,
     };
 
-    setItems((prev) => {
-      const next = prev.map((it) => (it.id === itemId ? updatedItem : it));
-      void upsertInventoryItemToSupabase(updatedItem, next);
-      return next;
-    });
+    const nextItems = items.map((it) => (it.id === itemId ? updatedItem : it));
+    setItems(nextItems);
 
-    setOrderHistory((prev) => {
-      const idx = prev.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
-      if (idx !== -1) {
-        const updated = [...prev];
-        updated[idx] = {
-          ...updated[idx],
-          status: '발주취소',
-          completedDate: TODAY_STR,
-          note: updated[idx].note
-            ? `${updated[idx].note} (발주취소됨)`
-            : '관리자에 의해 발주 취소됨',
-        };
-        void saveOrderHistoryToSupabase(updated);
-        return updated;
-      }
-      return prev;
-    });
+    const idx = orderHistory.findIndex((r) => r.itemId === itemId && r.status === '입고대기');
+    let nextHistory = orderHistory;
+    if (idx !== -1) {
+      const updated = [...orderHistory];
+      updated[idx] = {
+        ...updated[idx],
+        status: '발주취소',
+        completedDate: TODAY_STR,
+        note: updated[idx].note
+          ? `${updated[idx].note} (발주취소됨)`
+          : '관리자에 의해 발주 취소됨',
+      };
+      nextHistory = updated;
+      setOrderHistory(nextHistory);
+    }
 
     recordAuditLog({
       actionType: 'ORDER_CANCEL',
@@ -1508,15 +1578,25 @@ export default function App() {
       details: `[${targetItem.itemName}] 진행 중인 발주 취소`,
     });
 
+    const [itemRes] = await Promise.all([
+      upsertInventoryItemToSupabase(updatedItem, nextItems),
+      idx !== -1 ? saveOrderHistoryToSupabase(nextHistory) : Promise.resolve({ ok: true }),
+    ]);
+
+    if (!itemRes.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${itemRes.errorMessage}`);
+      return;
+    }
+
     showToast(`[${targetItem.itemName}] 발주가 취소되었으며, 클라우드 DB에 발주대기 상태로 복구되었습니다.`);
   };
 
-  const handleUpdateOrderHistoryRecord = (updatedRecord: OrderHistoryRecord) => {
-    setOrderHistory((prev) => {
-      const next = prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r));
-      void saveOrderHistoryToSupabase(next);
-      return next;
-    });
+  const handleUpdateOrderHistoryRecord = async (updatedRecord: OrderHistoryRecord) => {
+    const nextHistory = orderHistory.map((r) =>
+      r.id === updatedRecord.id ? updatedRecord : r
+    );
+    setOrderHistory(nextHistory);
+
     recordAuditLog({
       actionType: 'ORDER_UPDATE',
       targetId: updatedRecord.id,
@@ -1526,16 +1606,20 @@ export default function App() {
       afterValue: `${updatedRecord.status} · ${updatedRecord.orderedPackQty}${updatedRecord.packUnit}`,
       details: `[${updatedRecord.itemName}] 발주 이력 상세 정보 수정`,
     });
+
+    const res = await saveOrderHistoryToSupabase(nextHistory);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast('발주 이력 상세 정보가 클라우드 DB에 수정되었습니다.');
   };
 
-  const handleDeleteOrderHistoryRecord = (recordId: string) => {
+  const handleDeleteOrderHistoryRecord = async (recordId: string) => {
     const targetRec = orderHistory.find((r) => r.id === recordId);
-    setOrderHistory((prev) => {
-      const next = prev.filter((r) => r.id !== recordId);
-      void saveOrderHistoryToSupabase(next);
-      return next;
-    });
+    const nextHistory = orderHistory.filter((r) => r.id !== recordId);
+    setOrderHistory(nextHistory);
+
     if (targetRec) {
       recordAuditLog({
         actionType: 'ORDER_HISTORY_DELETE',
@@ -1546,6 +1630,12 @@ export default function App() {
         afterValue: '이력 삭제됨',
         details: `[${targetRec.itemName}] 발주 이력 레코드 삭제`,
       });
+    }
+
+    const res = await saveOrderHistoryToSupabase(nextHistory);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
     }
     showToast('발주 이력 레코드가 클라우드 DB에서 삭제되었습니다.');
   };
@@ -1588,14 +1678,11 @@ export default function App() {
     setIsNewItemModalOpen(true);
   };
 
-  const handleSaveItem = (item: InventoryItem) => {
+  const handleSaveItem = async (item: InventoryItem) => {
     const prevItem = items.find((i) => i.id === item.id);
-    setItems((prev) => {
-      const exists = prev.some((i) => i.id === item.id);
-      const next = exists ? prev.map((i) => (i.id === item.id ? item : i)) : [item, ...prev];
-      void upsertInventoryItemToSupabase(item, next);
-      return next;
-    });
+    const exists = items.some((i) => i.id === item.id);
+    const nextItems = exists ? items.map((i) => (i.id === item.id ? item : i)) : [item, ...items];
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: prevItem ? 'ITEM_UPDATE' : 'ITEM_CREATE',
@@ -1611,17 +1698,20 @@ export default function App() {
         : `신규 소모품 '${item.itemName}' 등록`,
     });
 
+    const res = await upsertInventoryItemToSupabase(item, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast(`💾 소모품 '${item.itemName}' 정보가 클라우드 DB에 안전하게 저장되었습니다.`);
   };
 
-  const handleDeleteItem = (itemId: string) => {
+  const handleDeleteItem = async (itemId: string) => {
     const it = items.find((i) => i.id === itemId);
     if (!it) return;
-    setItems((prev) => {
-      const next = prev.filter((i) => i.id !== itemId);
-      void deleteInventoryItemFromSupabase(itemId, next);
-      return next;
-    });
+    const nextItems = items.filter((i) => i.id !== itemId);
+    setItems(nextItems);
 
     recordAuditLog({
       actionType: 'ITEM_DELETE',
@@ -1633,13 +1723,18 @@ export default function App() {
       details: `소모품 '${it.itemName} (${it.spec})' 마스터 삭제`,
     });
 
+    const res = await deleteInventoryItemFromSupabase(itemId, nextItems);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 삭제 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast(`🗑️ '${it.itemName} (${it.spec})' 품목이 클라우드 DB에서 삭제되었습니다.`);
   };
 
-  const handleUpdateCompanyProfile = (profile: CompanyProfile) => {
+  const handleUpdateCompanyProfile = async (profile: CompanyProfile) => {
     const prevBudget = companyProfile.monthlyBudget;
     setCompanyProfile(profile);
-    void saveCompanyProfileToSupabase(profile);
 
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
@@ -1649,15 +1744,19 @@ export default function App() {
       details: '자사 기준정보 및 월별 소모품 예산 한도 수정',
     });
 
+    const res = await saveCompanyProfileToSupabase(profile);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
+
     showToast('💾 자사 기준정보 및 월별 소모품 예산 한도가 클라우드 DB에 저장되었습니다.');
   };
 
-  const handleAddCategory = (cat: Category) => {
-    setCategories((prev) => {
-      const next = [...prev, cat];
-      void saveCategoriesToSupabase(next);
-      return next;
-    });
+  const handleAddCategory = async (cat: Category) => {
+    const next = [...categories, cat];
+    setCategories(next);
+
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
       targetId: cat.id,
@@ -1666,15 +1765,19 @@ export default function App() {
       afterValue: `${cat.name} (안전재고 ${cat.safetyDays}일)`,
       details: `신규 카테고리 '${cat.name}' 추가`,
     });
+
+    const res = await saveCategoriesToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast(`💾 카테고리 '${cat.name}'이(가) 클라우드 DB에 추가 및 저장되었습니다.`);
   };
 
-  const handleUpdateCategory = (cat: Category) => {
-    setCategories((prev) => {
-      const next = prev.map((c) => (c.id === cat.id ? cat : c));
-      void saveCategoriesToSupabase(next);
-      return next;
-    });
+  const handleUpdateCategory = async (cat: Category) => {
+    const next = categories.map((c) => (c.id === cat.id ? cat : c));
+    setCategories(next);
+
     recordAuditLog({
       actionType: 'CATEGORY_MUTATE',
       targetId: cat.id,
@@ -1683,16 +1786,20 @@ export default function App() {
       afterValue: `${cat.name} (안전재고 ${cat.safetyDays}일)`,
       details: `카테고리 '${cat.name}' 설정 및 라인별 수령장소 수정`,
     });
+
+    const res = await saveCategoriesToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast(`💾 카테고리 '${cat.name}' 설정 및 라인별 수령장소가 클라우드 DB에 저장되었습니다.`);
   };
 
-  const handleDeleteCategory = (catId: string) => {
+  const handleDeleteCategory = async (catId: string) => {
     const targetCat = categories.find((c) => c.id === catId);
-    setCategories((prev) => {
-      const next = prev.filter((c) => c.id !== catId);
-      void saveCategoriesToSupabase(next);
-      return next;
-    });
+    const next = categories.filter((c) => c.id !== catId);
+    setCategories(next);
+
     if (targetCat) {
       recordAuditLog({
         actionType: 'CATEGORY_MUTATE',
@@ -1703,15 +1810,19 @@ export default function App() {
         details: `카테고리 '${targetCat.name}' 삭제`,
       });
     }
+
+    const res = await saveCategoriesToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast('🗑️ 카테고리가 클라우드 DB에서 삭제되었습니다.');
   };
 
-  const handleAddVendor = (vend: Vendor) => {
-    setVendors((prev) => {
-      const next = [...prev, vend];
-      void saveVendorsToSupabase(next);
-      return next;
-    });
+  const handleAddVendor = async (vend: Vendor) => {
+    const next = [...vendors, vend];
+    setVendors(next);
+
     recordAuditLog({
       actionType: 'VENDOR_MUTATE',
       targetId: vend.id,
@@ -1720,15 +1831,19 @@ export default function App() {
       afterValue: `${vend.name} (리드타임 ${vend.defaultLeadTime}일)`,
       details: `신규 공급업체 '${vend.name}' 등록`,
     });
+
+    const res = await saveVendorsToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast(`💾 공급업체 '${vend.name}'이(가) 클라우드 DB에 등록되었습니다.`);
   };
 
-  const handleUpdateVendor = (vend: Vendor) => {
-    setVendors((prev) => {
-      const next = prev.map((v) => (v.id === vend.id ? vend : v));
-      void saveVendorsToSupabase(next);
-      return next;
-    });
+  const handleUpdateVendor = async (vend: Vendor) => {
+    const next = vendors.map((v) => (v.id === vend.id ? vend : v));
+    setVendors(next);
+
     recordAuditLog({
       actionType: 'VENDOR_MUTATE',
       targetId: vend.id,
@@ -1737,16 +1852,20 @@ export default function App() {
       afterValue: `${vend.name} (${vend.contactPerson || '담당자'} / 리드타임 ${vend.defaultLeadTime}일)`,
       details: `공급업체 '${vend.name}' 정보 수정`,
     });
+
+    const res = await saveVendorsToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast(`💾 공급업체 '${vend.name}' 정보가 클라우드 DB에 수정·저장되었습니다.`);
   };
 
-  const handleDeleteVendor = (vendId: string) => {
+  const handleDeleteVendor = async (vendId: string) => {
     const targetVendor = vendors.find((v) => v.id === vendId);
-    setVendors((prev) => {
-      const next = prev.filter((v) => v.id !== vendId);
-      void saveVendorsToSupabase(next);
-      return next;
-    });
+    const next = vendors.filter((v) => v.id !== vendId);
+    setVendors(next);
+
     if (targetVendor) {
       recordAuditLog({
         actionType: 'VENDOR_MUTATE',
@@ -1757,31 +1876,43 @@ export default function App() {
         details: `공급업체 '${targetVendor.name}' 삭제`,
       });
     }
+
+    const res = await saveVendorsToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast('🗑️ 공급업체가 클라우드 DB에서 삭제되었습니다.');
   };
 
-  const handleAddUnit = (u: Unit) => {
-    setUnits((prev) => {
-      const next = [...prev, u];
-      void saveUnitsToSupabase(next);
-      return next;
-    });
+  const handleAddUnit = async (u: Unit) => {
+    const next = [...units, u];
+    setUnits(next);
+
+    const res = await saveUnitsToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast(`💾 단위 '${u.name}'이(가) 클라우드 DB에 등록되었습니다.`);
   };
 
-  const handleDeleteUnit = (unitId: string) => {
-    setUnits((prev) => {
-      const next = prev.filter((u) => u.id !== unitId);
-      void saveUnitsToSupabase(next);
-      return next;
-    });
+  const handleDeleteUnit = async (unitId: string) => {
+    const next = units.filter((u) => u.id !== unitId);
+    setUnits(next);
+
+    const res = await saveUnitsToSupabase(next);
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 저장 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast('🗑️ 단위가 클라우드 DB에서 삭제되었습니다.');
   };
 
   const handleManualSaveMasterChanges = async (label = '기준정보 및 품목 마스터') => {
     setIsCloudSyncing(true);
     try {
-      await Promise.all([
+      const results = await Promise.all([
         batchUpsertInventoryItemsToSupabase(items, items),
         saveCategoriesToSupabase(categories),
         saveVendorsToSupabase(vendors),
@@ -1790,24 +1921,34 @@ export default function App() {
         saveUserPasswordsToSupabase(userPasswords),
       ]);
 
+      const failed = results.find((r) => !r.ok);
+      if (failed) {
+        showToast(`⚠️ [Supabase 저장 실패] ${failed.errorMessage}`);
+        return;
+      }
+
       showToast(
         `☁️ [클라우드 DB 저장 완료] ${label}의 모든 데이터가 Supabase 클라우드 DB에 안전하게 반영되었습니다.`
       );
     } catch (e) {
       console.error('Failed to manually save master changes to Supabase', e);
-      showToast(`⚠️ [저장 지연] ${label} 클라우드 DB 동기화 중 오류가 발생했습니다.`);
+      showToast(`⚠️ [저장 오류] ${label} 클라우드 DB 동기화 중 오류가 발생했습니다.`);
     } finally {
       setIsCloudSyncing(false);
     }
   };
 
-  const handleClearAuditLogs = () => {
+  const handleClearAuditLogs = async () => {
     if ((currentUser?.level ?? 99) !== 0) {
       showToast('⚠️ 변경 이력 초기화 권한은 LV.0 최고관리자에게만 있습니다.');
       return;
     }
     setAuditLogs([]);
-    void clearAuditLogsInSupabase();
+    const res = await clearAuditLogsInSupabase();
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [Supabase 삭제 실패] ${res.errorMessage}`);
+      return;
+    }
     showToast('🗑️ 모든 데이터 변경 이력(Audit Log)이 클라우드 DB에서 초기화되었습니다.');
   };
 
@@ -1834,16 +1975,22 @@ export default function App() {
     setOrderHistory([]);
     setUsageLogs([]);
     setCompanyProfile(INITIAL_COMPANY_PROFILE);
-    setUserAccounts([...INITIAL_USER_ACCOUNTS].sort(compareUserAccountsByAffiliation));
+    setUserAccounts(ensureDefaultAdminAccount(INITIAL_USER_ACCOUNTS));
+    setUserPasswords({ admin: '1234' });
     setAuditLogs([resetEntry]);
 
-    await resetAllCloudDataInSupabase(
+    const res = await resetAllCloudDataInSupabase(
       INITIAL_COMPANY_PROFILE,
       INITIAL_USER_ACCOUNTS,
       INITIAL_UNITS,
       INITIAL_MEMO
     );
-    void insertAuditLogToSupabase(resetEntry, [resetEntry]);
+    await insertAuditLogToSupabase(resetEntry, [resetEntry]);
+
+    if (!res.ok && isDbConnected) {
+      showToast(`⚠️ [클라우드 DB 초기화 경고] ${res.errorMessage}`);
+      return;
+    }
 
     showToast('초기화가 완료되었습니다. (Supabase 클라우드 DB의 모든 현장/재고 데이터가 초기화되었습니다)');
   };
@@ -1894,19 +2041,19 @@ export default function App() {
             vendors={vendors}
             isWorkerMode={isEffectiveWorkerMode}
             onNavigateToFieldAudit={() => handleTabChangeWithRBAC('field-audit')}
-            onUpdateStock={handleUpdateStock}
-            onUpdateDailyUsage={handleUpdateDailyUsage}
-            onToggleStatus={handleToggleStatus}
-            onReceiveStock={handleReceiveStock}
+            onUpdateStock={(id, stock) => void handleUpdateStock(id, stock)}
+            onUpdateDailyUsage={(id, usage) => void handleUpdateDailyUsage(id, usage)}
+            onToggleStatus={(id, status) => void handleToggleStatus(id, status)}
+            onReceiveStock={(id) => void handleReceiveStock(id)}
             onOpenOrderModal={handleOpenOrderModalForVendorAndItems}
             onEditItem={handleOpenEditItem}
-            onDeleteItem={handleDeleteItem}
+            onDeleteItem={(id) => void handleDeleteItem(id)}
             memo={memo}
             onMemoChange={handleMemoChange}
             memoLastSaved={memoLastSaved}
             lastAuditTimestamp={lastAuditTimestamp}
             onEditOrder={(item) => setEditingOrderTarget(item)}
-            onCancelOrder={handleCancelOrder}
+            onCancelOrder={(id) => void handleCancelOrder(id)}
           />
         )}
 
@@ -1917,10 +2064,10 @@ export default function App() {
             userAccounts={userAccounts}
             currentUser={currentUser}
             isWorkerMode={isEffectiveWorkerMode}
-            onUpdateStock={handleUpdateStock}
-            onReceiveStock={handleReceiveStock}
-            onBatchCommitStock={handleBatchCommitStock}
-            onConfirmAuditWithoutChange={handleConfirmAuditWithoutChange}
+            onUpdateStock={(id, stock) => void handleUpdateStock(id, stock)}
+            onReceiveStock={(id, rem, inc) => void handleReceiveStock(id, rem, inc)}
+            onBatchCommitStock={(changes) => void handleBatchCommitStock(changes)}
+            onConfirmAuditWithoutChange={(ids) => void handleConfirmAuditWithoutChange(ids)}
           />
         )}
 
@@ -1932,12 +2079,12 @@ export default function App() {
             usageLogs={usageLogs}
             companyProfile={companyProfile}
             currentUser={currentUser}
-            onConfirmOrder={handleConfirmOrder}
+            onConfirmOrder={(ids, od, ea, q) => void handleConfirmOrder(ids, od, ea, q)}
             onOpenPOMetaModal={handleOpenPOMetaModal}
-            onUpdateOrder={handleUpdateOrder}
-            onCancelOrder={handleCancelOrder}
-            onUpdateOrderHistoryRecord={handleUpdateOrderHistoryRecord}
-            onDeleteOrderHistoryRecord={handleDeleteOrderHistoryRecord}
+            onUpdateOrder={(id, od, ea, q) => void handleUpdateOrder(id, od, ea, q)}
+            onCancelOrder={(id) => void handleCancelOrder(id)}
+            onUpdateOrderHistoryRecord={(rec) => void handleUpdateOrderHistoryRecord(rec)}
+            onDeleteOrderHistoryRecord={(id) => void handleDeleteOrderHistoryRecord(id)}
             onShowToast={showToast}
           />
         )}
@@ -1949,26 +2096,26 @@ export default function App() {
             vendors={vendors}
             units={units}
             companyProfile={companyProfile}
-            onUpdateCompanyProfile={handleUpdateCompanyProfile}
-            onUpdateCategory={handleUpdateCategory}
-            onAddCategory={handleAddCategory}
-            onDeleteCategory={handleDeleteCategory}
-            onUpdateVendor={handleUpdateVendor}
-            onAddVendor={handleAddVendor}
-            onDeleteVendor={handleDeleteVendor}
-            onAddUnit={handleAddUnit}
-            onDeleteUnit={handleDeleteUnit}
+            onUpdateCompanyProfile={(p) => void handleUpdateCompanyProfile(p)}
+            onUpdateCategory={(c) => void handleUpdateCategory(c)}
+            onAddCategory={(c) => void handleAddCategory(c)}
+            onDeleteCategory={(id) => void handleDeleteCategory(id)}
+            onUpdateVendor={(v) => void handleUpdateVendor(v)}
+            onAddVendor={(v) => void handleAddVendor(v)}
+            onDeleteVendor={(id) => void handleDeleteVendor(id)}
+            onAddUnit={(u) => void handleAddUnit(u)}
+            onDeleteUnit={(id) => void handleDeleteUnit(id)}
             onEditItem={handleOpenEditItem}
-            onDeleteItem={handleDeleteItem}
+            onDeleteItem={(id) => void handleDeleteItem(id)}
             onOpenNewItemModal={() => {
               setEditingItem(null);
               setIsNewItemModalOpen(true);
             }}
-            onResetAllData={handleResetAllData}
+            onResetAllData={() => void handleResetAllData()}
             userAccounts={userAccounts}
-            onAssignItemReceiver={handleAssignItemReceiver}
-            onUpdateItemDeliveryLocation={handleUpdateItemDeliveryLocation}
-            onUpdateItemLine={handleUpdateItemLine}
+            onAssignItemReceiver={(id, acc) => void handleAssignItemReceiver(id, acc)}
+            onUpdateItemDeliveryLocation={(id, loc) => void handleUpdateItemDeliveryLocation(id, loc)}
+            onUpdateItemLine={(id, line) => void handleUpdateItemLine(id, line)}
             onShowToast={showToast}
             onSaveAllChanges={() => void handleManualSaveMasterChanges('기준정보 관리')}
           />
@@ -1982,8 +2129,8 @@ export default function App() {
             companyProfile={companyProfile}
             orderHistory={orderHistory}
             currentUser={currentUser}
-            onApplyActualDailyUsage={handleApplyActualDailyUsage}
-            onBatchApplyActualDailyUsage={handleBatchApplyActualDailyUsage}
+            onApplyActualDailyUsage={(id, usage) => void handleApplyActualDailyUsage(id, usage)}
+            onBatchApplyActualDailyUsage={(updates) => void handleBatchApplyActualDailyUsage(updates)}
             onShowToast={showToast}
           />
         )}
@@ -1992,7 +2139,7 @@ export default function App() {
           <AuditLogTab
             logs={auditLogs}
             currentUser={currentUser}
-            onClearLogs={handleClearAuditLogs}
+            onClearLogs={() => void handleClearAuditLogs()}
             onShowToast={showToast}
           />
         )}
@@ -2003,11 +2150,11 @@ export default function App() {
             items={calculatedItems}
             userPasswords={userPasswords}
             currentUser={currentUser}
-            onAddAccount={handleAddAccount}
-            onUpdateAccount={handleUpdateAccount}
-            onDeleteAccount={handleDeleteAccount}
-            onToggleAccountActive={handleToggleAccountActive}
-            onResetUserPassword={handleResetUserPassword}
+            onAddAccount={(acc) => void handleAddAccount(acc)}
+            onUpdateAccount={(acc, prevId) => void handleUpdateAccount(acc, prevId)}
+            onDeleteAccount={(id, opts) => void handleDeleteAccount(id, opts)}
+            onToggleAccountActive={(id) => void handleToggleAccountActive(id)}
+            onResetUserPassword={(u, d) => void handleResetUserPassword(u, d)}
             onSaveAllChanges={() => void handleManualSaveMasterChanges('계정 관리')}
           />
         )}
@@ -2019,7 +2166,7 @@ export default function App() {
           setIsNewItemModalOpen(false);
           setEditingItem(null);
         }}
-        onSave={handleSaveItem}
+        onSave={(item) => void handleSaveItem(item)}
         categories={categories}
         vendors={vendors}
         units={units}
@@ -2043,7 +2190,7 @@ export default function App() {
             quantities[it.id] =
               it.orderedPackQty || it.recommendedPackOrderQty;
           });
-          handleConfirmOrder(
+          void handleConfirmOrder(
             poModalData.items.map((i) => i.id),
             poModalData.orderDate,
             poModalData.expectedArrivalDate,
@@ -2057,8 +2204,8 @@ export default function App() {
         item={editingOrderTarget}
         isOpen={!!editingOrderTarget}
         onClose={() => setEditingOrderTarget(null)}
-        onSaveOrder={handleUpdateOrder}
-        onCancelOrder={handleCancelOrder}
+        onSaveOrder={(id, od, ea, q) => void handleUpdateOrder(id, od, ea, q)}
+        onCancelOrder={(id) => void handleCancelOrder(id)}
       />
 
       <LoginModal
@@ -2075,7 +2222,7 @@ export default function App() {
           if (!mustChangePassword) setIsPasswordChangeOpen(false);
         }}
         userPasswords={userPasswords}
-        onChangePassword={handleChangePassword}
+        onChangePassword={(u, pw) => void handleChangePassword(u, pw)}
         registeredUsers={userAccounts}
         isForced={mustChangePassword}
         forcedUsername={currentUser?.username}

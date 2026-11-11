@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import {
   getSavedSupabaseConfig,
-  purgeLegacyLocalStorageData,
   setRuntimeSupabaseConfig,
   SupabaseConfig,
   testSupabaseConnection,
@@ -82,7 +81,6 @@ export const DbConfigModal: React.FC<DbConfigModalProps> = ({
     };
 
     try {
-      purgeLegacyLocalStorageData();
       setRuntimeSupabaseConfig(newConfig);
       setUpdatedAt(nowStr);
       setStatusMessage({
@@ -103,18 +101,17 @@ export const DbConfigModal: React.FC<DbConfigModalProps> = ({
 
   const handleClearConfig = () => {
     try {
-      purgeLegacyLocalStorageData();
       setRuntimeSupabaseConfig(null);
       setUrl('');
       setAnonKey('');
       setUpdatedAt(undefined);
       setStatusMessage({
         type: 'info',
-        text: '저장된 Supabase 연결 정보 및 브라우저 잔여 캐시가 모두 초기화되었습니다.',
+        text: 'Supabase 런타임 연결 정보가 초기화되었습니다.',
       });
       onConfigSaved(false);
       if (onShowToast) {
-        onShowToast('Supabase DB 연결 설정 및 로컬 캐시가 초기화되었습니다.');
+        onShowToast('Supabase DB 연결 설정이 초기화되었습니다.');
       }
     } catch (e) {
       console.error('Failed to clear Supabase config', e);

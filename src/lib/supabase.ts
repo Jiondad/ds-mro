@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import {
   AuditLogRecord,
   Category,
@@ -12,66 +12,8 @@ import {
   UserLevel,
   Vendor,
 } from '../types';
+import { INITIAL_USER_ACCOUNTS } from '../mockData';
 import { compareUserAccountsByAffiliation } from '../utils/calculations';
-
-export const STORAGE_KEY_SUPABASE_CONFIG = 'daeseong_steel_supabase_config_v1';
-
-// 레거시 로컬 스토리지 데이터 키 목록 (자동 영구 삭제 대상)
-const LEGACY_DATA_STORAGE_KEYS = [
-  'daeseong_steel_inventory_v1',
-  'daeseong_steel_categories_v1',
-  'daeseong_steel_vendors_v1',
-  'daeseong_steel_units_v1',
-  'daeseong_steel_memo_v1',
-  'daeseong_steel_last_audit_v1',
-  'daeseong_steel_company_profile_v1',
-  'daeseong_steel_order_history_v1',
-  'daeseong_steel_usage_logs_v1',
-  'daeseong_steel_worker_mode_v1',
-  'daeseong_steel_current_user_v1',
-  'daeseong_steel_user_passwords_v1',
-  'daeseong_steel_user_accounts_v1',
-  'daeseong_steel_audit_logs_v1',
-  'daeseong_steel_active_tab_v1',
-];
-
-/**
- * 다른 PC/브라우저에서 접속 시 예전 목업(Mock) 데이터나 구버전 로컬 스토리지 캐시가
- * 부활하거나 클라우드 DB를 덮어쓰는 현상을 원천 차단하기 위해 로컬 스토리지 데이터 캐시를 전면 삭제합니다.
- */
-export function purgeLegacyLocalStorageData(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    LEGACY_DATA_STORAGE_KEYS.forEach((key) => {
-      window.localStorage.removeItem(key);
-      window.sessionStorage.removeItem(key);
-    });
-
-    // ds_mro_ 접두어 필터 캐시도 일괄 제거
-    const localKeysToRemove: string[] = [];
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const k = window.localStorage.key(i);
-      if (k && (k.startsWith('ds_mro_') || (k.startsWith('daeseong_steel_') && k !== STORAGE_KEY_SUPABASE_CONFIG))) {
-        localKeysToRemove.push(k);
-      }
-    }
-    localKeysToRemove.forEach((k) => window.localStorage.removeItem(k));
-
-    const sessionKeysToRemove: string[] = [];
-    for (let i = 0; i < window.sessionStorage.length; i++) {
-      const k = window.sessionStorage.key(i);
-      if (k && (k.startsWith('ds_mro_') || k.startsWith('daeseong_steel_'))) {
-        sessionKeysToRemove.push(k);
-      }
-    }
-    sessionKeysToRemove.forEach((k) => window.sessionStorage.removeItem(k));
-  } catch (e) {
-    console.warn('Failed to purge legacy localStorage keys', e);
-  }
-}
-
-// 모듈 로드 즉시 레거시 로컬 스토리지 캐시 영구 삭제 실행
-purgeLegacyLocalStorageData();
 
 export interface SupabaseConfig {
   url: string;
@@ -79,38 +21,23 @@ export interface SupabaseConfig {
   updatedAt?: string;
 }
 
+export interface SupabaseMutationResult {
+  ok: boolean;
+  errorMessage?: string;
+  isRlsError?: boolean;
+  isForeignKeyError?: boolean;
+}
+
 const envSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
 const envSupabaseAnonKey =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
 
+// 브라우저 스토리지(localStorage/sessionStorage)를 일체 사용하지 않고 런타임 메모리 및 환경변수만 참조
 let runtimeSupabaseConfig: SupabaseConfig | null = null;
 
 export function getSavedSupabaseConfig(): SupabaseConfig {
   if (runtimeSupabaseConfig && runtimeSupabaseConfig.url && runtimeSupabaseConfig.anonKey) {
     return runtimeSupabaseConfig;
-  }
-  if (envSupabaseUrl && envSupabaseAnonKey) {
-    return {
-      url: envSupabaseUrl,
-      anonKey: envSupabaseAnonKey,
-    };
-  }
-  try {
-    if (typeof window !== 'undefined') {
-      const raw = window.localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<SupabaseConfig>;
-        if (parsed.url && parsed.anonKey) {
-          return {
-            url: parsed.url.trim(),
-            anonKey: parsed.anonKey.trim(),
-            updatedAt: parsed.updatedAt,
-          };
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Failed to read Supabase config', e);
   }
   return {
     url: envSupabaseUrl,
@@ -120,15 +47,6 @@ export function getSavedSupabaseConfig(): SupabaseConfig {
 
 export function setRuntimeSupabaseConfig(config: SupabaseConfig | null): void {
   runtimeSupabaseConfig = config;
-  try {
-    if (typeof window !== 'undefined') {
-      if (config && config.url && config.anonKey) {
-        window.localStorage.setItem(STORAGE_KEY_SUPABASE_CONFIG, JSON.stringify(config));
-      } else {
-        window.localStorage.removeItem(STORAGE_KEY_SUPABASE_CONFIG);
-      }
-    }
-  } catch {}
   getSupabaseClient();
 }
 
@@ -138,7 +56,8 @@ let currentConfiguredKey = '';
 
 /**
  * 환경변수(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) 또는
- * 최고관리자 DB 연결 설정으로 싱글톤 Supabase 클라이언트를 반환합니다.
+ * 최고관리자 런타임 DB 연결 설정으로 싱글톤 Supabase 클라이언트를 반환합니다.
+ * (브라우저 localStorage / sessionStorage 세션 저장 완전 비활성화)
  */
 export function getSupabaseClient(): SupabaseClient | null {
   const { url, anonKey } = getSavedSupabaseConfig();
@@ -159,12 +78,13 @@ export function getSupabaseClient(): SupabaseClient | null {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
+          detectSessionInUrl: false,
         },
       });
       currentConfiguredUrl = url;
       currentConfiguredKey = anonKey;
     } catch (e) {
-      console.error('Failed to initialize Supabase client', e);
+      console.error('[Supabase] 클라이언트 초기화 실패:', e);
       return null;
     }
   }
@@ -175,7 +95,60 @@ export function getSupabaseClient(): SupabaseClient | null {
 export const supabase: SupabaseClient | null = getSupabaseClient();
 
 /**
- * 입력받은 Supabase Project URL 및 Anon Key로 실제 연결 가능 여부를 테스트합니다.
+ * Supabase PostgrestError를 분석하여 RLS 정책 차단, 외래키 제약, 테이블 미존재 등을 판별하고 로깅합니다.
+ */
+function analyzeSupabaseError(
+  table: string,
+  operation: string,
+  error: PostgrestError | null
+): { isRlsError: boolean; isMissingTable: boolean; isForeignKeyError: boolean; message: string } {
+  if (!error) {
+    return { isRlsError: false, isMissingTable: false, isForeignKeyError: false, message: '' };
+  }
+
+  const rawMsg = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+  const isRlsError =
+    error.code === '42501' ||
+    /row-level security|permission denied|new row violates row-level security/i.test(rawMsg);
+  const isMissingTable =
+    error.code === '42P01' ||
+    error.code === 'PGRST205' ||
+    /relation .* does not exist|could not find the table/i.test(rawMsg);
+  const isForeignKeyError =
+    error.code === '23503' || /foreign key|violates.*constraint/i.test(rawMsg);
+
+  if (!isMissingTable) {
+    console.error(`[Supabase DB Error] table=${table} op=${operation} code=${error.code}:`, error);
+  }
+
+  if (isRlsError) {
+    return {
+      isRlsError: true,
+      isMissingTable: false,
+      isForeignKeyError: false,
+      message: `RLS 보안 정책에 의해 '${table}' 테이블 ${operation} 작업이 거부되었습니다. (Supabase RLS 정책 확인 필요)`,
+    };
+  }
+
+  if (isForeignKeyError) {
+    return {
+      isRlsError: false,
+      isMissingTable: false,
+      isForeignKeyError: true,
+      message: `외래 키(Foreign Key) 참조 제약조건으로 인해 '${table}' ${operation} 작업을 수행할 수 없습니다.`,
+    };
+  }
+
+  return {
+    isRlsError: false,
+    isMissingTable,
+    isForeignKeyError: false,
+    message: error.message || `Supabase '${table}' ${operation} 오류`,
+  };
+}
+
+/**
+ * 입력받은 Supabase Project URL 및 Anon Key로 실제 연결 및 테이블 조회 가능 여부를 테스트합니다.
  */
 export async function testSupabaseConnection(
   url: string,
@@ -200,11 +173,12 @@ export async function testSupabaseConnection(
 
   try {
     const tempClient = createClient(trimmedUrl, trimmedKey, {
-      auth: { persistSession: false },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
 
     const { error } = await tempClient.auth.getSession();
     if (error) {
+      console.error('[Supabase Connection Test Error]:', error);
       return {
         ok: false,
         message: `Supabase 인증 오류: ${error.message}`,
@@ -216,6 +190,7 @@ export async function testSupabaseConnection(
       message: 'Supabase 클라우드 데이터베이스 연결 테스트에 성공했습니다.',
     };
   } catch (err) {
+    console.error('[Supabase Connection Test Exception]:', err);
     const msg = err instanceof Error ? err.message : '네트워크 또는 URL 오류';
     return {
       ok: false,
@@ -231,9 +206,14 @@ export async function testSupabaseConnection(
 export async function saveAppStateKeyToSupabase(
   key: string,
   payload: unknown
-): Promise<{ ok: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase client not configured' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다. 우측 상단 [DB 연결 설정]을 확인하세요.',
+    };
+  }
 
   try {
     const { error } = await client.from('mro_app_state').upsert(
@@ -245,11 +225,20 @@ export async function saveAppStateKeyToSupabase(
       { onConflict: 'state_key' }
     );
     if (error) {
-      return { ok: false, errorMessage: error.message };
+      const analyzed = analyzeSupabaseError('mro_app_state', `UPSERT(${key})`, error);
+      return {
+        ok: false,
+        isRlsError: analyzed.isRlsError,
+        errorMessage: analyzed.message,
+      };
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, errorMessage: e instanceof Error ? e.message : 'Unknown error' };
+    console.error(`[Supabase Exception] mro_app_state(${key}):`, e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '네트워크 통신 오류',
+    };
   }
 }
 
@@ -262,7 +251,11 @@ export async function fetchAllAppStateFromSupabase(): Promise<Record<string, any
       .from('mro_app_state')
       .select('state_key, state_value, updated_at');
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      analyzeSupabaseError('mro_app_state', 'SELECT', error);
+      return null;
+    }
+    if (!data || data.length === 0) {
       return null;
     }
 
@@ -273,14 +266,51 @@ export async function fetchAllAppStateFromSupabase(): Promise<Record<string, any
       }
     });
     return result;
-  } catch {
+  } catch (e) {
+    console.error('[Supabase Exception] fetchAllAppStateFromSupabase:', e);
     return null;
   }
 }
 
 // ============================================================================
-// 2. 사용자 계정 (user_accounts) Direct CRUD
+// 2. 사용자 계정 (user_accounts) Direct CRUD + 기본 최고관리자(admin) 보장
 // ============================================================================
+
+/**
+ * 클라우드 DB 계정 목록에 기본 최고관리자(admin, 초기비번 1234) 계정이 누락되지 않도록 보장합니다.
+ */
+export function ensureDefaultAdminAccount(accounts: UserAccount[]): UserAccount[] {
+  const defaultAdmin = INITIAL_USER_ACCOUNTS.find((a) => a.username === 'admin') || {
+    id: 'usr_admin',
+    username: 'admin',
+    password: '1234',
+    name: '김종현 실장',
+    level: 0 as UserLevel,
+    roleLabel: 'LV.0 최고관리자',
+    affiliation: '포승공장',
+    department: '관리팀 / 총괄',
+    phone: '010-8899-7700',
+    isActive: true,
+    createdAt: '2026-01-01',
+  };
+
+  const hasAdmin = accounts.some((a) => a.username === 'admin');
+  const merged = hasAdmin
+    ? accounts.map((a) =>
+        a.username === 'admin'
+          ? {
+              ...defaultAdmin,
+              ...a,
+              level: 0 as UserLevel,
+              isActive: true,
+              password: a.password || '1234',
+            }
+          : a
+      )
+    : [defaultAdmin, ...accounts];
+
+  return [...merged].sort(compareUserAccountsByAffiliation);
+}
 
 export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | null> {
   const client = getSupabaseClient();
@@ -294,7 +324,11 @@ export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | n
       .order('department', { ascending: true })
       .order('name', { ascending: true });
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      analyzeSupabaseError('user_accounts', 'SELECT', error);
+      return null;
+    }
+    if (!data || data.length === 0) {
       return null;
     }
 
@@ -304,23 +338,30 @@ export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | n
         rawLevel === 0 || rawLevel === 1 || rawLevel === 2 || rawLevel === 3
           ? (rawLevel as UserLevel)
           : 2;
+      const username = String(row.username || '');
       return {
         id: String(row.id),
-        username: String(row.username || ''),
+        username,
+        password: row.password ? String(row.password) : '1234',
         name: String(row.name || ''),
         affiliation: row.affiliation ? String(row.affiliation) : '포승공장',
         department: row.department ? String(row.department) : '포승공장',
         phone: row.phone ? String(row.phone) : undefined,
-        level: validLevel,
-        roleLabel: row.role_label ? String(row.role_label) : `LV.${validLevel}`,
-        isActive: row.is_active !== false,
+        level: username === 'admin' ? 0 : validLevel,
+        roleLabel:
+          username === 'admin'
+            ? 'LV.0 최고관리자'
+            : row.role_label
+            ? String(row.role_label)
+            : `LV.${validLevel}`,
+        isActive: username === 'admin' ? true : row.is_active !== false,
         createdAt: row.created_at ? String(row.created_at).substring(0, 10) : undefined,
       };
     });
 
-    return mapped.sort(compareUserAccountsByAffiliation);
+    return ensureDefaultAdminAccount(mapped);
   } catch (e) {
-    console.warn('Supabase user_accounts fetch warning:', e);
+    console.error('[Supabase Exception] fetchUserAccountsFromSupabase:', e);
     return null;
   }
 }
@@ -328,14 +369,19 @@ export async function fetchUserAccountsFromSupabase(): Promise<UserAccount[] | n
 export async function insertUserAccountToSupabase(
   account: UserAccount,
   allAccounts?: UserAccount[]
-): Promise<{ ok: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다.',
+    };
+  }
 
   try {
-    if (allAccounts) {
-      void saveAppStateKeyToSupabase('userAccounts', allAccounts);
-    }
+    const stateResPromise = allAccounts
+      ? saveAppStateKeyToSupabase('userAccounts', ensureDefaultAdminAccount(allAccounts))
+      : Promise.resolve({ ok: true } as SupabaseMutationResult);
 
     const { error } = await client.from('user_accounts').upsert(
       {
@@ -353,27 +399,45 @@ export async function insertUserAccountToSupabase(
       { onConflict: 'id' }
     );
 
+    const stateRes = await stateResPromise;
+
     if (error) {
-      return { ok: false, errorMessage: error.message };
+      const analyzed = analyzeSupabaseError('user_accounts', 'INSERT/UPSERT', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        isRlsError: analyzed.isRlsError,
+        errorMessage: analyzed.message,
+      };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return { ok: false, errorMessage: msg };
+    console.error('[Supabase Exception] insertUserAccountToSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '계정 생성 중 DB 통신 오류',
+    };
   }
 }
 
 export async function updateUserAccountInSupabase(
   account: UserAccount,
   allAccounts?: UserAccount[]
-): Promise<{ ok: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다.',
+    };
+  }
 
   try {
-    if (allAccounts) {
-      void saveAppStateKeyToSupabase('userAccounts', allAccounts);
-    }
+    const stateResPromise = allAccounts
+      ? saveAppStateKeyToSupabase('userAccounts', ensureDefaultAdminAccount(allAccounts))
+      : Promise.resolve({ ok: true } as SupabaseMutationResult);
 
     const { error } = await client
       .from('user_accounts')
@@ -389,48 +453,72 @@ export async function updateUserAccountInSupabase(
       })
       .eq('id', account.id);
 
+    const stateRes = await stateResPromise;
+
     if (error) {
-      return { ok: false, errorMessage: error.message };
+      const analyzed = analyzeSupabaseError('user_accounts', 'UPDATE', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        isRlsError: analyzed.isRlsError,
+        errorMessage: analyzed.message,
+      };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return { ok: false, errorMessage: msg };
+    console.error('[Supabase Exception] updateUserAccountInSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '계정 수정 중 DB 통신 오류',
+    };
   }
 }
 
 export async function deleteUserAccountFromSupabase(
   accountId: string,
   allAccounts?: UserAccount[]
-): Promise<{ ok: boolean; isForeignKeyError?: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다.',
+    };
+  }
 
   try {
-    if (allAccounts) {
-      void saveAppStateKeyToSupabase('userAccounts', allAccounts);
-    }
+    const stateResPromise = allAccounts
+      ? saveAppStateKeyToSupabase('userAccounts', ensureDefaultAdminAccount(allAccounts))
+      : Promise.resolve({ ok: true } as SupabaseMutationResult);
 
     const { error } = await client
       .from('user_accounts')
       .delete()
       .eq('id', accountId);
 
+    const stateRes = await stateResPromise;
+
     if (error) {
-      const isFk =
-        error.code === '23503' ||
-        /foreign key|violates|constraint/i.test(error.message || '') ||
-        /foreign key|violates|constraint/i.test(error.details || '');
+      const analyzed = analyzeSupabaseError('user_accounts', 'DELETE', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
       return {
         ok: false,
-        isForeignKeyError: isFk,
-        errorMessage: error.message,
+        isRlsError: analyzed.isRlsError,
+        isForeignKeyError: analyzed.isForeignKeyError,
+        errorMessage: analyzed.message,
       };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return { ok: false, errorMessage: msg };
+    console.error('[Supabase Exception] deleteUserAccountFromSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '계정 삭제 중 DB 통신 오류',
+    };
   }
 }
 
@@ -529,9 +617,14 @@ export async function fetchInventoryItemsFromSupabase(): Promise<InventoryItem[]
 
   try {
     const { data, error } = await client.from('inventory_items').select('*');
-    if (error || !data) return null;
+    if (error) {
+      analyzeSupabaseError('inventory_items', 'SELECT', error);
+      return null;
+    }
+    if (!data) return null;
     return data.map(mapRowToInventoryItem);
-  } catch {
+  } catch (e) {
+    console.error('[Supabase Exception] fetchInventoryItemsFromSupabase:', e);
     return null;
   }
 }
@@ -539,122 +632,418 @@ export async function fetchInventoryItemsFromSupabase(): Promise<InventoryItem[]
 export async function upsertInventoryItemToSupabase(
   item: InventoryItem,
   allItems?: InventoryItem[]
-): Promise<{ ok: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다.',
+    };
+  }
 
   try {
-    if (allItems) {
-      void saveAppStateKeyToSupabase('items', allItems);
-    }
+    const stateResPromise = allItems
+      ? saveAppStateKeyToSupabase('items', allItems)
+      : Promise.resolve({ ok: true } as SupabaseMutationResult);
 
     const { error } = await client
       .from('inventory_items')
       .upsert(mapInventoryItemToRow(item), { onConflict: 'id' });
 
+    const stateRes = await stateResPromise;
+
     if (error) {
-      return { ok: false, errorMessage: error.message };
+      const analyzed = analyzeSupabaseError('inventory_items', 'UPSERT', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        isRlsError: analyzed.isRlsError,
+        errorMessage: analyzed.message,
+      };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return { ok: false, errorMessage: msg };
+    console.error('[Supabase Exception] upsertInventoryItemToSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '품목 저장 중 DB 통신 오류',
+    };
   }
 }
 
 export async function batchUpsertInventoryItemsToSupabase(
   itemsToUpsert: InventoryItem[],
   allItems: InventoryItem[]
-): Promise<{ ok: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다.',
+    };
+  }
 
   try {
-    const statePromise = saveAppStateKeyToSupabase('items', allItems);
+    const stateResPromise = saveAppStateKeyToSupabase('items', allItems);
+    let tableError: PostgrestError | null = null;
+
     if (itemsToUpsert.length > 0) {
       const rows = itemsToUpsert.map(mapInventoryItemToRow);
-      await client.from('inventory_items').upsert(rows, { onConflict: 'id' });
+      const { error } = await client
+        .from('inventory_items')
+        .upsert(rows, { onConflict: 'id' });
+      tableError = error;
     }
-    await statePromise;
-    return { ok: true };
+
+    const stateRes = await stateResPromise;
+
+    if (tableError) {
+      const analyzed = analyzeSupabaseError('inventory_items', 'BATCH_UPSERT', tableError);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        isRlsError: analyzed.isRlsError,
+        errorMessage: analyzed.message,
+      };
+    }
+
+    return stateRes.ok ? { ok: true } : stateRes;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return { ok: false, errorMessage: msg };
+    console.error('[Supabase Exception] batchUpsertInventoryItemsToSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '품목 일괄 저장 중 DB 통신 오류',
+    };
   }
 }
 
 export async function deleteInventoryItemFromSupabase(
   itemId: string,
   allItems?: InventoryItem[]
-): Promise<{ ok: boolean; errorMessage?: string }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
+  if (!client) {
+    return {
+      ok: false,
+      errorMessage: 'Supabase DB가 연결되지 않았습니다.',
+    };
+  }
 
   try {
-    if (allItems) {
-      void saveAppStateKeyToSupabase('items', allItems);
-    }
+    const stateResPromise = allItems
+      ? saveAppStateKeyToSupabase('items', allItems)
+      : Promise.resolve({ ok: true } as SupabaseMutationResult);
 
     const { error } = await client
       .from('inventory_items')
       .delete()
       .eq('id', itemId);
 
+    const stateRes = await stateResPromise;
+
     if (error) {
-      return { ok: false, errorMessage: error.message };
+      const analyzed = analyzeSupabaseError('inventory_items', 'DELETE', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        isRlsError: analyzed.isRlsError,
+        errorMessage: analyzed.message,
+      };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Unknown error';
-    return { ok: false, errorMessage: msg };
+    console.error('[Supabase Exception] deleteInventoryItemFromSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '품목 삭제 중 DB 통신 오류',
+    };
   }
 }
 
 // ============================================================================
-// 4. 카테고리 / 공급업체 / 단위 / 발주이력 / 사용량로그 / 변경로그 Direct CRUD
+// 4. 카테고리 (categories) / 공급업체 (vendors) / 단위 (units) /
+//    발주이력 (order_history) / 사용량로그 (usage_logs) / 변경로그 (mro_audit_logs) Direct CRUD
 // ============================================================================
 
-export async function saveCategoriesToSupabase(categories: Category[]): Promise<{ ok: boolean }> {
-  return await saveAppStateKeyToSupabase('categories', categories);
+export async function fetchCategoriesFromSupabase(): Promise<Category[] | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('categories').select('*');
+    if (error || !data || data.length === 0) return null;
+    return data.map((r: Record<string, any>) => ({
+      id: String(r.id),
+      name: String(r.name || ''),
+      orderPolicyType: r.order_policy_type ?? r.orderPolicyType ?? 'DAYS_BASED',
+      safetyDays: Number(r.safety_days ?? r.safetyDays ?? 15),
+      orderCycleDays: Number(r.order_cycle_days ?? r.orderCycleDays ?? 30),
+      defaultTriggerPackQty: r.default_trigger_pack_qty ?? r.defaultTriggerPackQty ?? undefined,
+      defaultOrderPackQty: r.default_order_pack_qty ?? r.defaultOrderPackQty ?? undefined,
+      description: r.description ?? undefined,
+      deliveryLocation: r.delivery_location ?? r.deliveryLocation ?? undefined,
+      lineDeliveryLocations: r.line_delivery_locations ?? r.lineDeliveryLocations ?? undefined,
+    }));
+  } catch {
+    return null;
+  }
 }
 
-export async function saveVendorsToSupabase(vendors: Vendor[]): Promise<{ ok: boolean }> {
-  return await saveAppStateKeyToSupabase('vendors', vendors);
+export async function saveCategoriesToSupabase(
+  categories: Category[]
+): Promise<SupabaseMutationResult> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: false, errorMessage: 'Supabase DB가 연결되지 않았습니다.' };
+
+  const stateRes = await saveAppStateKeyToSupabase('categories', categories);
+  try {
+    if (categories.length > 0) {
+      const rows = categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        order_policy_type: c.orderPolicyType || 'DAYS_BASED',
+        safety_days: c.safetyDays,
+        order_cycle_days: c.orderCycleDays,
+        default_trigger_pack_qty: c.defaultTriggerPackQty ?? null,
+        default_order_pack_qty: c.defaultOrderPackQty ?? null,
+        description: c.description || null,
+        delivery_location: c.deliveryLocation || null,
+        line_delivery_locations: c.lineDeliveryLocations || null,
+      }));
+      const { error } = await client.from('categories').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        const analyzed = analyzeSupabaseError('categories', 'UPSERT', error);
+        if (!analyzed.isMissingTable && !stateRes.ok) {
+          return { ok: false, isRlsError: analyzed.isRlsError, errorMessage: analyzed.message };
+        }
+      }
+    }
+  } catch {}
+  return stateRes;
 }
 
-export async function saveUnitsToSupabase(units: Unit[]): Promise<{ ok: boolean }> {
+export async function fetchVendorsFromSupabase(): Promise<Vendor[] | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client.from('vendors').select('*');
+    if (error || !data || data.length === 0) return null;
+    return data.map((r: Record<string, any>) => ({
+      id: String(r.id),
+      name: String(r.name || ''),
+      defaultLeadTime: Number(r.default_lead_time ?? r.defaultLeadTime ?? 3),
+      isActive: r.is_active !== false && r.isActive !== false,
+      phone: r.phone ?? undefined,
+      email: r.email ?? undefined,
+      contactPerson: r.contact_person ?? r.contactPerson ?? undefined,
+      address: r.address ?? undefined,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function saveVendorsToSupabase(
+  vendors: Vendor[]
+): Promise<SupabaseMutationResult> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: false, errorMessage: 'Supabase DB가 연결되지 않았습니다.' };
+
+  const stateRes = await saveAppStateKeyToSupabase('vendors', vendors);
+  try {
+    if (vendors.length > 0) {
+      const rows = vendors.map((v) => ({
+        id: v.id,
+        name: v.name,
+        default_lead_time: v.defaultLeadTime,
+        is_active: v.isActive !== false,
+        phone: v.phone || null,
+        email: v.email || null,
+        contact_person: v.contactPerson || null,
+        address: v.address || null,
+      }));
+      const { error } = await client.from('vendors').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        const analyzed = analyzeSupabaseError('vendors', 'UPSERT', error);
+        if (!analyzed.isMissingTable && !stateRes.ok) {
+          return { ok: false, isRlsError: analyzed.isRlsError, errorMessage: analyzed.message };
+        }
+      }
+    }
+  } catch {}
+  return stateRes;
+}
+
+export async function saveUnitsToSupabase(units: Unit[]): Promise<SupabaseMutationResult> {
   return await saveAppStateKeyToSupabase('units', units);
+}
+
+export async function fetchOrderHistoryFromSupabase(): Promise<OrderHistoryRecord[] | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client
+      .from('order_history')
+      .select('*')
+      .order('order_date', { ascending: false });
+    if (error || !data || data.length === 0) return null;
+    return data.map((r: Record<string, any>) => ({
+      id: String(r.id),
+      itemId: r.item_id ?? r.itemId ?? undefined,
+      orderDate: String(r.order_date ?? r.orderDate ?? ''),
+      expectedArrivalDate: String(r.expected_arrival_date ?? r.expectedArrivalDate ?? ''),
+      completedDate: r.completed_date ?? r.completedDate ?? null,
+      vendorName: String(r.vendor_name ?? r.vendorName ?? ''),
+      vendorId: r.vendor_id ?? r.vendorId ?? undefined,
+      line: (r.line || 'SL1') as ProductionLine,
+      itemName: String(r.item_name ?? r.itemName ?? ''),
+      spec: String(r.spec ?? ''),
+      orderedPackQty: Number(r.ordered_pack_qty ?? r.orderedPackQty ?? 0),
+      packUnit: String(r.pack_unit ?? r.packUnit ?? 'EA'),
+      unitConversion: Number(r.unit_conversion ?? r.unitConversion ?? 1),
+      baseUnit: String(r.base_unit ?? r.baseUnit ?? 'EA'),
+      unitPrice: Number(r.unit_price ?? r.unitPrice ?? 0),
+      totalAmount: Number(r.total_amount ?? r.totalAmount ?? 0),
+      deliveryLocation: String(r.delivery_location ?? r.deliveryLocation ?? ''),
+      status: r.status || '입고대기',
+      note: r.note ?? undefined,
+    }));
+  } catch {
+    return null;
+  }
 }
 
 export async function saveOrderHistoryToSupabase(
   orderHistory: OrderHistoryRecord[]
-): Promise<{ ok: boolean }> {
-  return await saveAppStateKeyToSupabase('orderHistory', orderHistory);
+): Promise<SupabaseMutationResult> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: false, errorMessage: 'Supabase DB가 연결되지 않았습니다.' };
+
+  const stateRes = await saveAppStateKeyToSupabase('orderHistory', orderHistory);
+  try {
+    if (orderHistory.length > 0) {
+      const rows = orderHistory.slice(0, 500).map((r) => ({
+        id: r.id,
+        item_id: r.itemId || null,
+        order_date: r.orderDate,
+        expected_arrival_date: r.expectedArrivalDate,
+        completed_date: r.completedDate || null,
+        vendor_name: r.vendorName,
+        vendor_id: r.vendorId || null,
+        line: r.line,
+        item_name: r.itemName,
+        spec: r.spec,
+        ordered_pack_qty: r.orderedPackQty,
+        pack_unit: r.packUnit,
+        unit_conversion: r.unitConversion || 1,
+        base_unit: r.baseUnit || 'EA',
+        unit_price: r.unitPrice,
+        total_amount: r.totalAmount,
+        delivery_location: r.deliveryLocation,
+        status: r.status,
+        note: r.note || null,
+      }));
+      const { error } = await client.from('order_history').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        analyzeSupabaseError('order_history', 'UPSERT', error);
+      }
+    }
+  } catch {}
+  return stateRes;
 }
 
-export async function saveUsageLogsToSupabase(usageLogs: UsageLog[]): Promise<{ ok: boolean }> {
-  return await saveAppStateKeyToSupabase('usageLogs', usageLogs);
+export async function fetchUsageLogsFromSupabase(): Promise<UsageLog[] | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client
+      .from('usage_logs')
+      .select('*')
+      .order('date', { ascending: false });
+    if (error || !data || data.length === 0) return null;
+    return data.map((r: Record<string, any>) => ({
+      id: String(r.id),
+      itemId: String(r.item_id ?? r.itemId ?? ''),
+      itemName: String(r.item_name ?? r.itemName ?? ''),
+      spec: String(r.spec ?? ''),
+      line: (r.line || 'SL1') as ProductionLine,
+      categoryId: String(r.category_id ?? r.categoryId ?? ''),
+      categoryName: String(r.category_name ?? r.categoryName ?? '기타'),
+      date: String(r.date ?? ''),
+      month: String(r.month ?? ''),
+      packUsedQty: Number(r.pack_used_qty ?? r.packUsedQty ?? 0),
+      baseUsedQty: Number(r.base_used_qty ?? r.baseUsedQty ?? 0),
+      unitPrice: Number(r.unit_price ?? r.unitPrice ?? 0),
+      totalCost: Number(r.total_cost ?? r.totalCost ?? 0),
+      baseUnit: String(r.base_unit ?? r.baseUnit ?? 'EA'),
+      packUnit: String(r.pack_unit ?? r.packUnit ?? 'EA'),
+      recordedVia: r.recorded_via ?? r.recordedVia ?? 'audit',
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function saveUsageLogsToSupabase(
+  usageLogs: UsageLog[]
+): Promise<SupabaseMutationResult> {
+  const client = getSupabaseClient();
+  if (!client) return { ok: false, errorMessage: 'Supabase DB가 연결되지 않았습니다.' };
+
+  const stateRes = await saveAppStateKeyToSupabase('usageLogs', usageLogs);
+  try {
+    if (usageLogs.length > 0) {
+      const rows = usageLogs.slice(0, 500).map((u) => ({
+        id: u.id,
+        item_id: u.itemId,
+        item_name: u.itemName,
+        spec: u.spec,
+        line: u.line,
+        category_id: u.categoryId,
+        category_name: u.categoryName,
+        date: u.date,
+        month: u.month,
+        pack_used_qty: u.packUsedQty,
+        base_used_qty: u.baseUsedQty,
+        unit_price: u.unitPrice,
+        total_cost: u.totalCost,
+        base_unit: u.baseUnit,
+        pack_unit: u.packUnit,
+        recorded_via: u.recordedVia,
+      }));
+      const { error } = await client.from('usage_logs').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        analyzeSupabaseError('usage_logs', 'UPSERT', error);
+      }
+    }
+  } catch {}
+  return stateRes;
 }
 
 export async function saveCompanyProfileToSupabase(
   companyProfile: CompanyProfile
-): Promise<{ ok: boolean }> {
+): Promise<SupabaseMutationResult> {
   return await saveAppStateKeyToSupabase('companyProfile', companyProfile);
 }
 
-export async function saveMemoToSupabase(memo: string): Promise<{ ok: boolean }> {
+export async function saveMemoToSupabase(memo: string): Promise<SupabaseMutationResult> {
   return await saveAppStateKeyToSupabase('memo', memo);
 }
 
 export async function saveLastAuditTimestampToSupabase(
   lastAuditTimestamp: string
-): Promise<{ ok: boolean }> {
+): Promise<SupabaseMutationResult> {
   return await saveAppStateKeyToSupabase('lastAuditTimestamp', lastAuditTimestamp);
 }
 
 export async function saveUserPasswordsToSupabase(
   userPasswords: Record<string, string>
-): Promise<{ ok: boolean }> {
+): Promise<SupabaseMutationResult> {
   return await saveAppStateKeyToSupabase('userPasswords', userPasswords);
 }
 
@@ -664,14 +1053,14 @@ export async function saveUserPasswordsToSupabase(
 export async function insertAuditLogToSupabase(
   log: AuditLogRecord,
   allAuditLogs?: AuditLogRecord[]
-): Promise<{ ok: boolean }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false };
+  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
 
   try {
-    if (allAuditLogs) {
-      void saveAppStateKeyToSupabase('auditLogs', allAuditLogs.slice(0, 1000));
-    }
+    const statePromise = allAuditLogs
+      ? saveAppStateKeyToSupabase('auditLogs', allAuditLogs.slice(0, 1000))
+      : Promise.resolve({ ok: true } as SupabaseMutationResult);
 
     const { error } = await client.from('mro_audit_logs').insert([
       {
@@ -697,22 +1086,39 @@ export async function insertAuditLogToSupabase(
       },
     ]);
 
-    return { ok: !error };
-  } catch {
-    return { ok: false };
+    const stateRes = await statePromise;
+    if (error) {
+      const analyzed = analyzeSupabaseError('mro_audit_logs', 'INSERT', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return { ok: false, isRlsError: analyzed.isRlsError, errorMessage: analyzed.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[Supabase Exception] insertAuditLogToSupabase:', e);
+    return { ok: false, errorMessage: e instanceof Error ? e.message : '로그 저장 실패' };
   }
 }
 
-export async function clearAuditLogsInSupabase(): Promise<{ ok: boolean }> {
+export async function clearAuditLogsInSupabase(): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false };
+  if (!client) return { ok: false, errorMessage: 'Supabase 미연결' };
 
   try {
-    await saveAppStateKeyToSupabase('auditLogs', []);
-    await client.from('mro_audit_logs').delete().neq('id', '');
+    const stateRes = await saveAppStateKeyToSupabase('auditLogs', []);
+    const { error } = await client.from('mro_audit_logs').delete().neq('id', '');
+    if (error) {
+      const analyzed = analyzeSupabaseError('mro_audit_logs', 'DELETE', error);
+      if (analyzed.isMissingTable && stateRes.ok) {
+        return { ok: true };
+      }
+      return { ok: false, isRlsError: analyzed.isRlsError, errorMessage: analyzed.message };
+    }
     return { ok: true };
-  } catch {
-    return { ok: false };
+  } catch (e) {
+    console.error('[Supabase Exception] clearAuditLogsInSupabase:', e);
+    return { ok: false, errorMessage: e instanceof Error ? e.message : '로그 초기화 오류' };
   }
 }
 
@@ -727,7 +1133,11 @@ export async function fetchAuditLogsFromSupabase(): Promise<AuditLogRecord[] | n
       .order('timestamp_ms', { ascending: false })
       .limit(1000);
 
-    if (error || !data || data.length === 0) return null;
+    if (error) {
+      analyzeSupabaseError('mro_audit_logs', 'SELECT', error);
+      return null;
+    }
+    if (!data || data.length === 0) return null;
 
     return data.map((row: Record<string, any>) => ({
       id: String(row.id),
@@ -735,7 +1145,7 @@ export async function fetchAuditLogsFromSupabase(): Promise<AuditLogRecord[] | n
       timestampMs: Number(row.timestamp_ms ?? row.timestampMs ?? Date.now()),
       operatorId: String(row.operator_id ?? row.operatorId ?? 'system'),
       operatorName: String(row.operator_name ?? row.operatorName ?? '관리자'),
-      operatorLevel: (Number(row.operator_level ?? row.operatorLevel ?? 0) as UserLevel),
+      operatorLevel: Number(row.operator_level ?? row.operatorLevel ?? 0) as UserLevel,
       operatorRoleLabel: String(row.operator_role_label ?? row.operatorRoleLabel ?? 'LV.0'),
       operatorAffiliation: row.operator_affiliation ?? row.operatorAffiliation ?? undefined,
       actionType: row.action_type ?? row.actionType ?? 'STOCK_UPDATE',
@@ -749,7 +1159,8 @@ export async function fetchAuditLogsFromSupabase(): Promise<AuditLogRecord[] | n
       details: row.details ?? undefined,
       ipOrDevice: row.ip_or_device ?? row.ipOrDevice ?? '웹',
     }));
-  } catch {
+  } catch (e) {
+    console.error('[Supabase Exception] fetchAuditLogsFromSupabase:', e);
     return null;
   }
 }
@@ -774,44 +1185,89 @@ export interface CloudSnapshot {
 }
 
 /**
- * 앱 최초 실행 시 또는 수동 새로고침 시 오직 Supabase 클라우드 DB에서만
- * 전체 데이터를 실시간으로 조회하여 반환합니다. (로컬 스토리지 미사용)
+ * 앱 최초 실행(Mount) 시 또는 수동 새로고침 시 오직 Supabase 클라우드 DB에서만
+ * 전체 데이터를 실시간으로 조회하여 반환합니다. (로컬 스토리지 캐시 전혀 사용하지 않음)
  */
 export async function fetchAllCloudDataFromSupabase(): Promise<CloudSnapshot | null> {
   const client = getSupabaseClient();
   if (!client) return null;
 
   try {
-    const [remoteAppState, tableAccounts, tableItems, tableAuditLogs] = await Promise.all([
+    const [
+      remoteAppState,
+      tableAccounts,
+      tableItems,
+      tableCategories,
+      tableVendors,
+      tableOrderHistory,
+      tableUsageLogs,
+      tableAuditLogs,
+    ] = await Promise.all([
       fetchAllAppStateFromSupabase(),
       fetchUserAccountsFromSupabase(),
       fetchInventoryItemsFromSupabase(),
+      fetchCategoriesFromSupabase(),
+      fetchVendorsFromSupabase(),
+      fetchOrderHistoryFromSupabase(),
+      fetchUsageLogsFromSupabase(),
       fetchAuditLogsFromSupabase(),
     ]);
 
     const state = remoteAppState || {};
 
-    // 품목: inventory_items 테이블 데이터가 존재하면 우선 사용하고, 없으면 mro_app_state.items 사용
+    // 1. 품목 (inventory_items 테이블 및 mro_app_state.items 연동)
     let resolvedItems: InventoryItem[] | null = null;
-    if (Array.isArray(state.items) && state.items.length > 0) {
+    if (tableItems && tableItems.length > 0) {
+      resolvedItems = tableItems;
+    } else if (Array.isArray(state.items) && state.items.length > 0) {
       resolvedItems = state.items;
-    } else if (tableItems && tableItems.length > 0) {
+    } else if (tableItems !== null) {
       resolvedItems = tableItems;
     } else if (Array.isArray(state.items)) {
       resolvedItems = state.items;
-    } else if (tableItems) {
-      resolvedItems = tableItems;
     }
 
-    // 사용자 계정: user_accounts 테이블 우선, 없으면 mro_app_state.userAccounts 사용
+    // 2. 카테고리 (categories 테이블 및 mro_app_state.categories 연동)
+    let resolvedCategories: Category[] | null = null;
+    if (tableCategories && tableCategories.length > 0) {
+      resolvedCategories = tableCategories;
+    } else if (Array.isArray(state.categories)) {
+      resolvedCategories = state.categories;
+    }
+
+    // 3. 공급업체 (vendors 테이블 및 mro_app_state.vendors 연동)
+    let resolvedVendors: Vendor[] | null = null;
+    if (tableVendors && tableVendors.length > 0) {
+      resolvedVendors = tableVendors;
+    } else if (Array.isArray(state.vendors)) {
+      resolvedVendors = state.vendors;
+    }
+
+    // 4. 발주 이력 (order_history 테이블 및 mro_app_state.orderHistory 연동)
+    let resolvedOrderHistory: OrderHistoryRecord[] | null = null;
+    if (tableOrderHistory && tableOrderHistory.length > 0) {
+      resolvedOrderHistory = tableOrderHistory;
+    } else if (Array.isArray(state.orderHistory)) {
+      resolvedOrderHistory = state.orderHistory;
+    }
+
+    // 5. 사용량 로그 (usage_logs 테이블 및 mro_app_state.usageLogs 연동)
+    let resolvedUsageLogs: UsageLog[] | null = null;
+    if (tableUsageLogs && tableUsageLogs.length > 0) {
+      resolvedUsageLogs = tableUsageLogs;
+    } else if (Array.isArray(state.usageLogs)) {
+      resolvedUsageLogs = state.usageLogs;
+    }
+
+    // 6. 사용자 계정 (user_accounts 테이블 우선, 없으면 mro_app_state.userAccounts + admin 기본계정 보장)
     let resolvedAccounts: UserAccount[] | null = null;
     if (tableAccounts && tableAccounts.length > 0) {
-      resolvedAccounts = tableAccounts;
+      resolvedAccounts = ensureDefaultAdminAccount(tableAccounts);
     } else if (Array.isArray(state.userAccounts) && state.userAccounts.length > 0) {
-      resolvedAccounts = [...state.userAccounts].sort(compareUserAccountsByAffiliation);
+      resolvedAccounts = ensureDefaultAdminAccount(state.userAccounts);
     }
 
-    // 변경 이력(Audit Log): mro_audit_logs 테이블 우선, 없으면 mro_app_state.auditLogs 사용
+    // 7. 변경 이력 (mro_audit_logs 테이블 우선, 없으면 mro_app_state.auditLogs 연동)
     let resolvedAuditLogs: AuditLogRecord[] | null = null;
     if (tableAuditLogs && tableAuditLogs.length > 0) {
       resolvedAuditLogs = tableAuditLogs;
@@ -821,11 +1277,11 @@ export async function fetchAllCloudDataFromSupabase(): Promise<CloudSnapshot | n
 
     return {
       items: resolvedItems,
-      categories: Array.isArray(state.categories) ? state.categories : null,
-      vendors: Array.isArray(state.vendors) ? state.vendors : null,
+      categories: resolvedCategories,
+      vendors: resolvedVendors,
       units: Array.isArray(state.units) ? state.units : null,
-      orderHistory: Array.isArray(state.orderHistory) ? state.orderHistory : null,
-      usageLogs: Array.isArray(state.usageLogs) ? state.usageLogs : null,
+      orderHistory: resolvedOrderHistory,
+      usageLogs: resolvedUsageLogs,
       auditLogs: resolvedAuditLogs,
       userAccounts: resolvedAccounts,
       userPasswords:
@@ -841,7 +1297,7 @@ export async function fetchAllCloudDataFromSupabase(): Promise<CloudSnapshot | n
         typeof state.lastAuditTimestamp === 'string' ? state.lastAuditTimestamp : null,
     };
   } catch (e) {
-    console.error('Failed to fetch all cloud data from Supabase:', e);
+    console.error('[Supabase Exception] fetchAllCloudDataFromSupabase:', e);
     return null;
   }
 }
@@ -854,16 +1310,24 @@ export async function resetAllCloudDataInSupabase(
   defaultAccounts: UserAccount[],
   defaultUnits: Unit[],
   defaultMemo: string
-): Promise<{ ok: boolean }> {
+): Promise<SupabaseMutationResult> {
   const client = getSupabaseClient();
-  if (!client) return { ok: false };
+  if (!client) {
+    return { ok: false, errorMessage: 'Supabase DB가 연결되지 않았습니다.' };
+  }
 
   try {
-    // 1. inventory_items 테이블 전체 비우기
-    await client.from('inventory_items').delete().neq('id', '');
+    // 1. 개별 테이블 비우기 (존재하는 경우)
+    await Promise.allSettled([
+      client.from('inventory_items').delete().neq('id', ''),
+      client.from('categories').delete().neq('id', ''),
+      client.from('vendors').delete().neq('id', ''),
+      client.from('order_history').delete().neq('id', ''),
+      client.from('usage_logs').delete().neq('id', ''),
+    ]);
 
     // 2. mro_app_state 키 초기화
-    await Promise.all([
+    const results = await Promise.all([
       saveAppStateKeyToSupabase('items', []),
       saveAppStateKeyToSupabase('categories', []),
       saveAppStateKeyToSupabase('vendors', []),
@@ -871,13 +1335,22 @@ export async function resetAllCloudDataInSupabase(
       saveAppStateKeyToSupabase('orderHistory', []),
       saveAppStateKeyToSupabase('usageLogs', []),
       saveAppStateKeyToSupabase('companyProfile', defaultProfile),
-      saveAppStateKeyToSupabase('userAccounts', defaultAccounts),
+      saveAppStateKeyToSupabase('userAccounts', ensureDefaultAdminAccount(defaultAccounts)),
+      saveAppStateKeyToSupabase('userPasswords', { admin: '1234' }),
       saveAppStateKeyToSupabase('memo', defaultMemo),
     ]);
 
+    const failed = results.find((r) => !r.ok);
+    if (failed) {
+      return failed;
+    }
+
     return { ok: true };
   } catch (e) {
-    console.error('Failed to reset cloud data in Supabase', e);
-    return { ok: false };
+    console.error('[Supabase Exception] resetAllCloudDataInSupabase:', e);
+    return {
+      ok: false,
+      errorMessage: e instanceof Error ? e.message : '클라우드 DB 초기화 중 오류 발생',
+    };
   }
 }

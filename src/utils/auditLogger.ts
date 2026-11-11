@@ -1,6 +1,5 @@
 import { AuditActionType, AuditLogRecord, ProductionLine, UserAccount, UserLevel } from '../types';
 
-export const STORAGE_KEY_AUDIT_LOGS = 'daeseong_steel_audit_logs_v1';
 export const MAX_AUDIT_LOGS = 1000;
 
 export interface CreateAuditLogParams {
@@ -198,7 +197,6 @@ export function createAuditLogEntry(params: CreateAuditLogParams): AuditLogRecor
  */
 export function exportAuditLogsToCSV(logs: AuditLogRecord[], filename = 'daeseong_steel_audit_logs.csv'): void {
   if (logs.length === 0) {
-    alert('내보낼 변경 이력 데이터가 없습니다.');
     return;
   }
 
