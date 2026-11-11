@@ -405,10 +405,5 @@ export function compareUserAccountsByAffiliation(a: UserAccount, b: UserAccount)
   }
 
   // 3순위: 사용자 이름(수령자명) 가나다순 정렬
-  return (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true });   
-  }
-
-  // 4순위: 사용자 이름(수령자명) 가나다순 정렬
   return (a.name || '').localeCompare(b.name || '', 'ko', { numeric: true });
 }
-
