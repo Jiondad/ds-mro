@@ -113,7 +113,7 @@ export interface CalculatedItem extends InventoryItem {
   receiverPhone?: string;
   deliveryDetailLocation?: string;
   isAuditDelayed: boolean; // 주간실사 주기(7일) 경과 또는 실사일시 누락 여부
-  daysSinceLastAudit: number | null; // 최근 실사일로부터 경과 일수 (미실사 시 null)
+  daysSinceLastAudit: boolean extends never ? never : number | null; // 최근 실사일로부터 경과 일수 (미실사 시 null)
 }
 
 export type ActiveTab =
@@ -170,6 +170,8 @@ export interface AuditLogRecord {
   afterValue: string; // 변경 후 값
   details?: string; // 세부 비고/차이 내역 (예: '소모 -2박스 반영', '납기 11/15')
   ipOrDevice?: string; // 작업 환경 (예: 'PC 웹', '모바일 현장')
+  prevItemsSnapshot?: InventoryItem[]; // 되돌리기(Rollback)용 변경 전 품목 스냅샷
+  isReverted?: boolean; // 되돌리기 실행 완료 여부
 }
 
 export type OrderHistoryStatus = '입고대기' | '입고완료' | '발주취소';
@@ -240,6 +242,3 @@ export interface UserAccount {
   allowedTabs?: ActiveTab[];
   description?: string;
 }
-
-
-
