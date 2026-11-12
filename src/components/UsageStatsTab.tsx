@@ -156,33 +156,46 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
         return {
           label: '이번 달 (2026년 11월 당월 실사)',
           months: ['2026-11'],
-          days: 7, // 11/1 ~ 11/7 실사 기준
+          days: 12,
           prevMonths: ['2026-10'],
-          prevDays: 7, // 전월 동기간 비교
+          prevDays: 31,
         };
       case '3months':
         return {
           label: '최근 3개월 (2026년 9월 ~ 11월)',
           months: ['2026-09', '2026-10', '2026-11'],
-          days: 30 + 31 + 7, // 68일
+          days: 30 + 31 + 12,
           prevMonths: ['2026-06', '2026-07', '2026-08'],
-          prevDays: 30 + 31 + 31, // 92일
+          prevDays: 30 + 31 + 31,
         };
       case '6months':
         return {
           label: '최근 6개월 (2026년 6월 ~ 11월)',
           months: ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'],
-          days: 30 + 31 + 31 + 30 + 31 + 7, // 160일
-          prevMonths: ['2026-06', '2026-07', '2026-08'],
-          prevDays: 92,
+          days: 30 + 31 + 31 + 30 + 31 + 12,
+          prevMonths: ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05'],
+          prevDays: 151,
         };
       case 'annual':
         return {
           label: '연간 누적 (2026년 누계)',
-          months: ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'],
-          days: 160,
-          prevMonths: ['2026-06', '2026-07', '2026-08'],
-          prevDays: 92,
+          months: [
+            '2026-01',
+            '2026-02',
+            '2026-03',
+            '2026-04',
+            '2026-05',
+            '2026-06',
+            '2026-07',
+            '2026-08',
+            '2026-09',
+            '2026-10',
+            '2026-11',
+            '2026-12',
+          ],
+          days: 316,
+          prevMonths: ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06'],
+          prevDays: 181,
         };
     }
   }, [period]);
@@ -190,9 +203,9 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
   // [기능 3] 당월(2026-11) 소모품 예산 한도 대비 누적 발주/소모 금액 계산
   const monthlyBudget = companyProfile?.monthlyBudget || 5000000;
   const currentMonthBudgetStats = useMemo(() => {
-    // 2026-11 당월 소모 실적 합계
+    // 2026-11 당월 소모 실적 합계 (가상 로그 제외)
     const novUsageCost = usageLogs
-      .filter((l) => l.month === '2026-11')
+      .filter((l) => l.month === '2026-11' && l.recordedVia !== 'simulated')
       .reduce((sum, l) => sum + l.totalCost, 0);
 
     // 2026-11 당월 발주 집행 합계 (취소 제외)
@@ -200,7 +213,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
       .filter((r) => r.orderDate.startsWith('2026-11') && r.status !== '발주취소')
       .reduce((sum, r) => sum + r.totalAmount, 0);
 
-    // 당월 누적 집행액 (소모 실적 + 당월 신규 발주 집행분 중 큰 기준 또는 합산 관리 기준)
+    // 당월 누적 집행액 (소모 실적 + 당월 신규 발주 집행분 합산 관리 기준)
     const totalCurrentMonthSpend = novUsageCost + novOrderCost;
     const pct = monthlyBudget > 0 ? Number(((totalCurrentMonthSpend / monthlyBudget) * 100).toFixed(1)) : 0;
     const isExceeded = pct > 100;
@@ -217,9 +230,11 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     };
   }, [usageLogs, orderHistory, monthlyBudget]);
 
-  // Filter logs for current period
+  // Filter logs for current period (가상 simulated 로그 배제)
   const filteredLogs = useMemo(() => {
     return usageLogs.filter((log) => {
+      if (log.recordedVia === 'simulated') return false;
+
       // Period filter
       if (!periodInfo.months.includes(log.month)) return false;
 
@@ -247,6 +262,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
   // Previous period logs for growth calculation
   const prevLogs = useMemo(() => {
     return usageLogs.filter((log) => {
+      if (log.recordedVia === 'simulated') return false;
       if (!periodInfo.prevMonths.includes(log.month)) return false;
       if (!matchLineFilter(log.line, selectedLine)) return false;
       if (selectedCategory !== '전체' && log.categoryId !== selectedCategory) return false;
@@ -265,7 +281,6 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
 
   const costGrowthRate = useMemo(() => {
     if (prevTotalCost === 0) return 0;
-    // Normalize per day to compare fairly
     const currentCostPerDay = currentTotalCost / (periodInfo.days || 1);
     const prevCostPerDay = prevTotalCost / (periodInfo.prevDays || 1);
     return Number((((currentCostPerDay - prevCostPerDay) / prevCostPerDay) * 100).toFixed(1));
@@ -337,7 +352,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     return sorted[0] || null;
   }, [filteredLogs]);
 
-  // 4. Per-item statistics aggregation & Auto-Learning Safety Stock Recommendation ([기능 2])
+  // 4. Per-item statistics aggregation & Auto-Learning Safety Stock Recommendation (실제 로그 존재 시에만 편차 산출)
   const itemStatsList = useMemo(() => {
     return items
       .filter((it) => {
@@ -366,22 +381,31 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
           (totalBaseUsed / (periodInfo.days || 1)).toFixed(1)
         );
 
-        // 3-month learning baseline (68 days: Sep, Oct, Nov) for safety stock recommendation
+        // 3-month learning baseline for safety stock recommendation (실제 로그만)
         const threeMonthLogs = usageLogs.filter(
-          (l) => l.itemId === item.id && ['2026-09', '2026-10', '2026-11'].includes(l.month)
+          (l) =>
+            l.recordedVia !== 'simulated' &&
+            l.itemId === item.id &&
+            ['2026-09', '2026-10', '2026-11'].includes(l.month)
         );
         const threeMonthBaseUsed = threeMonthLogs.reduce((sum, l) => sum + l.baseUsedQty, 0);
-        const threeMonthDailyUsage = Number((threeMonthBaseUsed / 68).toFixed(1));
+        const threeMonthDailyUsage = Number((threeMonthBaseUsed / 73).toFixed(1));
 
-        // Recommended daily usage (uses period actualDailyUsage if > 0, else 3-month average)
-        const recommendedDailyUsage =
-          actualDailyUsage > 0 ? actualDailyUsage : threeMonthDailyUsage;
+        // 실제 소모 이력이 최소 1건 이상 존재하는지 여부 (이력이 전혀 없으면 허수 편차 경고 발생 차단)
+        const hasActualUsageHistory = itemLogs.length > 0 || threeMonthLogs.length > 0;
+
+        // Recommended daily usage (실제 이력이 없으면 현행 기준 일소모량 유지)
+        const recommendedDailyUsage = hasActualUsageHistory
+          ? actualDailyUsage > 0
+            ? actualDailyUsage
+            : threeMonthDailyUsage
+          : item.dailyUsage;
 
         // Deviation percentage vs current master dailyUsage
         const baseline = item.dailyUsage || 1;
         const diff = recommendedDailyUsage - item.dailyUsage;
         const deviationPct =
-          item.dailyUsage > 0
+          hasActualUsageHistory && item.dailyUsage > 0
             ? Number(((diff / baseline) * 100).toFixed(1))
             : 0;
 
@@ -397,12 +421,16 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
             ? Number((recommendedSafetyStockBase / item.unitConversion).toFixed(1))
             : recommendedSafetyStockBase;
 
-        const isDeviation20OrMore = Math.abs(deviationPct) >= 20 && item.dailyUsage > 0;
+        const isDeviation20OrMore =
+          hasActualUsageHistory &&
+          recommendedDailyUsage > 0 &&
+          Math.abs(deviationPct) >= 20 &&
+          item.dailyUsage > 0;
 
         let status: 'urgent_high' | 'urgent_low' | 'normal' = 'normal';
-        if (deviationPct >= 20) {
+        if (isDeviation20OrMore && deviationPct >= 20) {
           status = 'urgent_high';
-        } else if (deviationPct <= -20) {
+        } else if (isDeviation20OrMore && deviationPct <= -20) {
           status = 'urgent_low';
         }
 
@@ -435,7 +463,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
   }, [itemStatsList]);
   const warningDeviationCount = warningDeviationItems.length;
 
-  // Monthly breakdown for Chart 1 (Last 6 months)
+  // Monthly breakdown for Chart 1 (Last 6 months, 실제 로그만)
   const monthlyChartData = useMemo(() => {
     const allMonths = ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'];
     const monthLabels: Record<string, string> = {
@@ -451,6 +479,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
 
     const data = allMonths.map((m) => {
       const logs = usageLogs.filter((l) => {
+        if (l.recordedVia === 'simulated') return false;
         if (l.month !== m) return false;
         if (!matchLineFilter(l.line, selectedLine)) return false;
         if (selectedCategory !== '전체' && l.categoryId !== selectedCategory) return false;
@@ -518,7 +547,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     return allTwelveMonths;
   }, [inOutYear, inOutMonthFilter]);
 
-  // [품목별 월별 입고/출고 현황] 품목별 × 월별 입고/출고(수량 및 금액) 행렬 집계 (단가 마스터 연동)
+  // [품목별 월별 입고/출고 현황] 품목별 × 월별 실제 입고/출고(수량 및 금액) 행렬 집계 (목업/시뮬레이션 완전 배제)
   const monthlyInOutMatrix = useMemo(() => {
     const filteredItems = items
       .filter((it) => {
@@ -557,7 +586,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     let grandTotalInPack = 0;
     let grandTotalOutPack = 0;
 
-    const rows = filteredItems.map((item, itemIdx) => {
+    const rows = filteredItems.map((item) => {
       const unitConv = item.unitConversion && item.unitConversion > 0 ? item.unitConversion : 1;
       const masterBaseUnitPrice = item.unitPrice || 0;
       const masterPackUnitPrice = Math.round(masterBaseUnitPrice * unitConv);
@@ -581,29 +610,20 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
       let rowTotalOutBase = 0;
       let rowTotalOutAmount = 0;
 
-      inOutTargetMonths.forEach((m, mIdx) => {
-        // 1) 출고(소모) 집계: usageLogs 연동 + 마스터 단가 연산
-        const monthUsageLogs = usageLogs.filter((l) => l.itemId === item.id && l.month === m);
-        let outPackQty = Number(
+      inOutTargetMonths.forEach((m) => {
+        // 1) 출고(소모) 집계: 오직 실제 기록된 usageLogs만 합산 (목업 산출 완전 제거)
+        const monthUsageLogs = usageLogs.filter(
+          (l) => l.recordedVia !== 'simulated' && l.itemId === item.id && l.month === m
+        );
+        const outPackQty = Number(
           monthUsageLogs.reduce((sum, l) => sum + l.packUsedQty, 0).toFixed(1)
         );
-        let outBaseQty = Number(
+        const outBaseQty = Number(
           monthUsageLogs.reduce((sum, l) => sum + l.baseUsedQty, 0).toFixed(1)
         );
-
-        // 이전/이후 월에 저장된 usageLog가 비어있을 경우 일소모량 기준 현실적 산출
-        if (monthUsageLogs.length === 0) {
-          const monthNum = parseInt(m.split('-')[1], 10) || 1;
-          const monthDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 7, 31][monthNum] || 30;
-          const monthFactor = [0, 0.95, 0.88, 1.02, 1.00, 1.05, 0.95, 0.98, 0.90, 1.05, 1.15, 1.12, 1.08][monthNum] || 1.0;
-          const itemFactor = 1.0 + ((item.itemName.length % 5) - 2) * 0.02;
-          outBaseQty = Math.max(1, Math.round(item.dailyUsage * monthDays * monthFactor * itemFactor));
-          outPackQty = Math.max(1, Math.ceil(outBaseQty / unitConv));
-        }
-
         const outAmount = Math.round(outBaseQty * masterBaseUnitPrice);
 
-        // 2) 입고(수령) 집계: orderHistory(발주취소 제외) 연동 + 당월 실사 입고분 + 과거월 정기보충 연동
+        // 2) 입고(수령/발주) 집계: 오직 실제 기록된 orderHistory(발주취소 제외)만 합산 (목업 산출 완전 제거)
         const monthOrders = orderHistory.filter((r) => {
           if (r.status === '발주취소') return false;
           const recordMonth = (r.completedDate || r.orderDate || '').slice(0, 7);
@@ -612,23 +632,10 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
           return r.itemName === item.itemName && r.spec === item.spec && r.line === item.line;
         });
 
-        let inPackQty = Number(
+        const inPackQty = Number(
           monthOrders.reduce((sum, r) => sum + (Number(r.orderedPackQty) || 0), 0).toFixed(1)
         );
-
-        // 당월(11월)의 경우 품목 발주/입고 수량(orderedPackQty) 중 발주이력보다 큰 수량이 있으면 반영
-        if (m.endsWith('-11') && (item.orderedPackQty || 0) > inPackQty) {
-          inPackQty = Number((item.orderedPackQty || 0).toFixed(1));
-        }
-
-        // 월별 개별 발주이력 레코드가 비어있고 출고 실적이 존재하는 경우, 월별 정기 입고(보충) 실적 산출
-        if (!m.endsWith('-11') && monthOrders.length === 0 && outPackQty > 0) {
-          const restockCycleFactor = ((itemIdx + mIdx) % 3 === 0) ? 1.15 : ((itemIdx + mIdx) % 3 === 1) ? 1.0 : 0.9;
-          inPackQty = Math.max(1, Math.round(outPackQty * restockCycleFactor));
-        }
-
         const inBaseQty = Number((inPackQty * unitConv).toFixed(1));
-        // 단가 마스터(item.unitPrice)와 연산하여 입고금액 산출
         const inAmount = Math.round(inBaseQty * masterBaseUnitPrice);
 
         monthlyMap[m] = {
@@ -687,7 +694,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     };
   }, [items, usageLogs, orderHistory, inOutTargetMonths, selectedLine, selectedCategory, searchQuery]);
 
-  // [Recharts 1] 선택된 기간 동안의 품목별 입고량 vs 출고량 추이 꺾은선 차트(Line Chart) 데이터
+  // [Recharts 1] 선택된 기간 동안의 품목별 입고량 vs 출고량 추이 꺾은선 차트(Line Chart) 데이터 (실제 데이터만)
   const rechartsLineChartConfig = useMemo(() => {
     const allSixMonths = [
       `${inOutYear}-06`,
@@ -697,7 +704,6 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
       `${inOutYear}-10`,
       `${inOutYear}-11`,
     ];
-    // 단일 월이 선택된 경우에도 추이 비교가 가능하도록 최근 6개월 흐름을 표시하되 선택 월을 강조
     const chartMonths =
       inOutTargetMonths.length >= 2 ? inOutTargetMonths : allSixMonths;
 
@@ -714,18 +720,19 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
       ? '포장단위'
       : '기본단위';
 
-    const data = chartMonths.map((m, mIdx) => {
+    const data = chartMonths.map((m) => {
       const monthNum = Number(m.split('-')[1]);
       const label = m.endsWith('-11') ? `${monthNum}월(당월)` : `${monthNum}월`;
 
       if (targetRow) {
-        // 만약 단일 월 필터 상태라 monthlyMap[m]이 비어있다면 즉석 계산
         let cell = targetRow.monthlyMap[m];
         if (!cell) {
           const item = targetRow.item;
           const unitConv = item.unitConversion && item.unitConversion > 0 ? item.unitConversion : 1;
           const masterBaseUnitPrice = item.unitPrice || 0;
-          const monthUsageLogs = usageLogs.filter((l) => l.itemId === item.id && l.month === m);
+          const monthUsageLogs = usageLogs.filter(
+            (l) => l.recordedVia !== 'simulated' && l.itemId === item.id && l.month === m
+          );
           const outPackQty = Number(
             monthUsageLogs.reduce((sum, l) => sum + l.packUsedQty, 0).toFixed(1)
           );
@@ -741,16 +748,9 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
             if (r.itemId && r.itemId === item.id) return true;
             return r.itemName === item.itemName && r.spec === item.spec && r.line === item.line;
           });
-          let inPackQty = Number(
+          const inPackQty = Number(
             monthOrders.reduce((sum, r) => sum + (Number(r.orderedPackQty) || 0), 0).toFixed(1)
           );
-          if (m.endsWith('-11') && (item.orderedPackQty || 0) > inPackQty) {
-            inPackQty = Number((item.orderedPackQty || 0).toFixed(1));
-          }
-          if (!m.endsWith('-11') && monthOrders.length === 0 && outPackQty > 0) {
-            const restockCycleFactor = mIdx % 3 === 0 ? 1.15 : mIdx % 3 === 1 ? 1.0 : 0.9;
-            inPackQty = Math.max(1, Math.round(outPackQty * restockCycleFactor));
-          }
           const inBaseQty = Number((inPackQty * unitConv).toFixed(1));
           const inAmount = Math.round(inBaseQty * masterBaseUnitPrice);
           cell = { inPackQty, inBaseQty, inAmount, outPackQty, outBaseQty, outAmount };
@@ -771,19 +771,21 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
         };
       }
 
-      // 전체 조회 품목 합산
+      // 전체 조회 품목 합산 (실제 실적만)
       let sumInQty = 0;
       let sumOutQty = 0;
       let sumInAmount = 0;
       let sumOutAmount = 0;
 
-      monthlyInOutMatrix.rows.forEach((row, rIdx) => {
+      monthlyInOutMatrix.rows.forEach((row) => {
         let cell = row.monthlyMap[m];
         if (!cell) {
           const item = row.item;
           const unitConv = item.unitConversion && item.unitConversion > 0 ? item.unitConversion : 1;
           const masterBaseUnitPrice = item.unitPrice || 0;
-          const monthUsageLogs = usageLogs.filter((l) => l.itemId === item.id && l.month === m);
+          const monthUsageLogs = usageLogs.filter(
+            (l) => l.recordedVia !== 'simulated' && l.itemId === item.id && l.month === m
+          );
           const outPackQty = Number(
             monthUsageLogs.reduce((sum, l) => sum + l.packUsedQty, 0).toFixed(1)
           );
@@ -791,6 +793,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
             monthUsageLogs.reduce((sum, l) => sum + l.baseUsedQty, 0).toFixed(1)
           );
           const outAmount = Math.round(outBaseQty * masterBaseUnitPrice);
+
           const monthOrders = orderHistory.filter((r) => {
             if (r.status === '발주취소') return false;
             const recordMonth = (r.completedDate || r.orderDate || '').slice(0, 7);
@@ -798,16 +801,9 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
             if (r.itemId && r.itemId === item.id) return true;
             return r.itemName === item.itemName && r.spec === item.spec && r.line === item.line;
           });
-          let inPackQty = Number(
+          const inPackQty = Number(
             monthOrders.reduce((sum, r) => sum + (Number(r.orderedPackQty) || 0), 0).toFixed(1)
           );
-          if (m.endsWith('-11') && (item.orderedPackQty || 0) > inPackQty) {
-            inPackQty = Number((item.orderedPackQty || 0).toFixed(1));
-          }
-          if (!m.endsWith('-11') && monthOrders.length === 0 && outPackQty > 0) {
-            const restockCycleFactor = (rIdx + mIdx) % 3 === 0 ? 1.15 : (rIdx + mIdx) % 3 === 1 ? 1.0 : 0.9;
-            inPackQty = Math.max(1, Math.round(outPackQty * restockCycleFactor));
-          }
           const inBaseQty = Number((inPackQty * unitConv).toFixed(1));
           const inAmount = Math.round(inBaseQty * masterBaseUnitPrice);
           cell = { inPackQty, inBaseQty, inAmount, outPackQty, outBaseQty, outAmount };
@@ -846,7 +842,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
     orderHistory,
   ]);
 
-  // [Recharts 2] 카테고리별 입고/출고 비중 파이 차트(Pie Chart) 데이터
+  // [Recharts 2] 카테고리별 입고/출고 비중 파이 차트(Pie Chart) 데이터 (실제 데이터만)
   const rechartsPieData = useMemo(() => {
     const catStats: Record<
       string,
@@ -1697,7 +1693,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
 
                 <div className="grid grid-cols-6 gap-2 sm:gap-4 items-end h-28 border-b border-slate-200 px-1 pb-1">
                   {monthlyChartData.data.map((m) => {
-                    const heightPct = Math.max(8, Math.round((m.total / monthlyChartData.maxTotal) * 100));
+                    const heightPct = m.total > 0 ? Math.max(8, Math.round((m.total / monthlyChartData.maxTotal) * 100)) : 0;
                     const sl1Pct = m.total > 0 ? (m.sl1 / m.total) * 100 : 0;
                     const sl2Pct = m.total > 0 ? (m.sl2 / m.total) * 100 : 0;
                     const asanPct = m.total > 0 ? (m.asan / m.total) * 100 : 0;
@@ -1765,44 +1761,50 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
               </div>
 
               {/* Pie Chart & Ranking */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center my-auto">
-                <div className="sm:col-span-6 h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={rechartsPieData.list}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={36}
-                        outerRadius={66}
-                        paddingAngle={2}
-                      >
-                        {rechartsPieData.list.map((entry) => (
-                          <Cell key={entry.id} fill={entry.color} stroke="#ffffff" strokeWidth={1.5} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ fontSize: '11px', borderRadius: '0.5rem' }}
-                        formatter={(val: unknown) => [`${formatCurrency(Number(val) || 0)}원`]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+              {rechartsPieData.list.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center my-auto">
+                  <div className="sm:col-span-6 h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={rechartsPieData.list}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={36}
+                          outerRadius={66}
+                          paddingAngle={2}
+                        >
+                          {rechartsPieData.list.map((entry) => (
+                            <Cell key={entry.id} fill={entry.color} stroke="#ffffff" strokeWidth={1.5} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ fontSize: '11px', borderRadius: '0.5rem' }}
+                          formatter={(val: unknown) => [`${formatCurrency(Number(val) || 0)}원`]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
 
-                <div className="sm:col-span-6 space-y-1.5 max-h-48 overflow-y-auto pr-1 text-xs">
-                  {rechartsPieData.list.map((cat) => (
-                    <div key={cat.id} className="flex items-center justify-between px-1.5 py-0.5 rounded hover:bg-slate-50">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                        <span className="font-bold text-slate-800 truncate text-[11px]">{cat.name}</span>
+                  <div className="sm:col-span-6 space-y-1.5 max-h-48 overflow-y-auto pr-1 text-xs">
+                    {rechartsPieData.list.map((cat) => (
+                      <div key={cat.id} className="flex items-center justify-between px-1.5 py-0.5 rounded hover:bg-slate-50">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                          <span className="font-bold text-slate-800 truncate text-[11px]">{cat.name}</span>
+                        </div>
+                        <span className="font-mono text-[11px] font-bold text-slate-900 shrink-0">{cat.pct}%</span>
                       </div>
-                      <span className="font-mono text-[11px] font-bold text-slate-900 shrink-0">{cat.pct}%</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-xs text-slate-400">
+                  집계된 {pieChartBasis === 'outbound' ? '출고(소모)' : '입고'} 실적이 없습니다.
+                </div>
+              )}
 
               {/* Top Category Ranking Bars */}
               <div className="pt-2 border-t border-slate-100 space-y-2">
@@ -1810,7 +1812,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                 <div className="space-y-1.5">
                   {categoryChartData.list.slice(0, 4).map((cat, idx) => {
                     const pct = currentTotalCost > 0 ? ((cat.cost / currentTotalCost) * 100).toFixed(0) : '0';
-                    const barWidth = Math.max(3, Math.round((cat.cost / categoryChartData.maxCost) * 100));
+                    const barWidth = cat.cost > 0 ? Math.max(3, Math.round((cat.cost / categoryChartData.maxCost) * 100)) : 0;
                     return (
                       <div key={cat.name} className="space-y-0.5 text-[11px]">
                         <div className="flex justify-between">
@@ -1869,14 +1871,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                   </div>
                   <div className="h-5 w-px bg-slate-200" />
                   <div>
-                    <span className="text-[10px] text-slate-500 font-bold block">기간 총 입고금액</span>
-                    <span className="font-mono font-black text-slate-900">
-                      {formatCurrency(monthlyInOutMatrix.grandTotalInAmount)}원
-                    </span>
-                  </div>
-                  <div className="h-7 w-px bg-slate-200" />
-                  <div>
-                    <span className="text-[10px] text-slate-500 font-bold block">기간 총 출고금액</span>
+                    <span className="text-[10px] text-rose-700 font-bold block">기간 총 출고금액</span>
                     <span className="font-mono font-black text-slate-900">
                       {formatCurrency(monthlyInOutMatrix.grandTotalOutAmount)}원
                     </span>
@@ -2191,14 +2186,14 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                               </div>
                             </td>
 
-                            {/* 구분 컬럼: [입고] (차분한 네이비 톤, 얇고 깔끔한 폰트) */}
+                            {/* 구분 컬럼: [입고] */}
                             <td className="py-1.5 px-0.5 text-center whitespace-nowrap border-r-2 border-slate-300 bg-slate-50 align-middle">
                               <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-800 text-slate-100">
                                 입고
                               </span>
                             </td>
 
-                            {/* 월별 입고 데이터 셀 (Regular/Light 슬림 폰트 & 콤팩트 패딩) */}
+                            {/* 월별 입고 데이터 셀 */}
                             {inOutTargetMonths.map((m) => {
                               const cell = row.monthlyMap[m] || {
                                 inPackQty: 0,
@@ -2311,7 +2306,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                               </span>
                             </td>
 
-                            {/* 월별 출고 데이터 셀 (Regular/Light 슬림 폰트 & 콤팩트 패딩) */}
+                            {/* 월별 출고 데이터 셀 */}
                             {inOutTargetMonths.map((m) => {
                               const cell = row.monthlyMap[m] || {
                                 inPackQty: 0,
@@ -2491,7 +2486,7 @@ export const UsageStatsTab: React.FC<UsageStatsTabProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <Sparkles className="w-4 h-4 text-blue-600" />
                   <h3 className="text-base font-extrabold text-slate-900">
-                    사용량 기반 안전재고 자동 학습 &amp; 동적 보정 센터
+                    사용량 기반 안전재고 자동 학습 & 동적 보정 센터
                   </h3>
                   {warningDeviationCount > 0 && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300">
