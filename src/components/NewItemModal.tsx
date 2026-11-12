@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Category, InventoryItem, ProductionLine, Unit, UserAccount, Vendor } from '../types';
 import { getDefaultDeliveryLocationForLine } from '../utils/calculations';
-import { X, Plus, AlertCircle, Package, RotateCcw, MapPin } from 'lucide-react';
+import { X, Plus, AlertCircle, Package, RotateCcw, MapPin, Copy } from 'lucide-react';
 
 interface NewItemModalProps {
   isOpen: boolean;
@@ -12,6 +12,7 @@ interface NewItemModalProps {
   units: Unit[];
   userAccounts?: UserAccount[];
   editingItem?: InventoryItem | null;
+  allItems?: InventoryItem[]; // 기존 품목 복사 기능을 위한 전체 품목 리스트 추가
 }
 
 const normalizeLine = (val?: string): ProductionLine => {
@@ -31,6 +32,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
   units,
   userAccounts = [],
   editingItem,
+  allItems = [],
 }) => {
   const [line, setLine] = useState<ProductionLine>('SL1');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -53,10 +55,14 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
   const [receiverPhone, setReceiverPhone] = useState<string>('');
   const [deliveryDetailLocation, setDeliveryDetailLocation] = useState<string>('');
 
+  // 복사할 대상 기존 품목 선택 상태
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+
   // Synchronize form states whenever modal opens or editingItem changes
-  // 의존성 배열에서 categories, vendors를 제거하여 타이핑 중 부모 리렌더링으로 인한 리셋 방지
   useEffect(() => {
     if (!isOpen) return;
+
+    setSelectedTemplateId('');
 
     if (editingItem) {
       setLine(normalizeLine(editingItem.line));
@@ -88,7 +94,6 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
       setReceiverPhone(editingItem.receiverPhone || '');
       setDeliveryDetailLocation(editingItem.deliveryDetailLocation || '');
     } else {
-      // Clean default values for new item registration
       setLine('SL1');
       setCategoryId(categories[0]?.id || '');
       setVendorId(vendors[0]?.id || '');
@@ -110,7 +115,46 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
       setReceiverPhone('');
       setDeliveryDetailLocation('');
     }
-  }, [isOpen, editingItem]);
+  }, [isOpen, editingItem, categories, vendors]);
+
+  // 기존 품목 선택 시 해당 품목의 속성으로 폼을 채워주는 템플릿 적용 함수 (신규 등록 모드일 때만 유효)
+  const handleApplyTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) return;
+
+    const templateItem = allItems.find((i) => i.id === templateId);
+    if (!templateItem) return;
+
+    setLine(normalizeLine(templateItem.line));
+    if (templateItem.categoryId) setCategoryId(templateItem.categoryId);
+    if (templateItem.vendorId) setVendorId(templateItem.vendorId);
+    // 품목명은 복사본임을 직관적으로 알 수 있도록 뒤에 ' (복사본)' 추가 혹은 그대로 가져오기
+    setItemName(templateItem.itemName ? `${templateItem.itemName} (복사)` : '');
+    setSpec(templateItem.spec || '');
+    setPackUnit(templateItem.packUnit || '다발');
+    setBaseUnit(templateItem.baseUnit || 'EA');
+    setUnitConversion(templateItem.unitConversion ?? 20);
+    setCurrentPackStock(0); // 신규 등록이므로 재고는 0으로 초기화
+    setDailyUsage(templateItem.dailyUsage ?? 10);
+    setUnitPrice(templateItem.unitPrice ?? 10000);
+    setMoqDescription(templateItem.moqDescription || '');
+    setLeadTimeDays(templateItem.leadTimeDays ?? 3);
+    setPurpose(templateItem.purpose || '');
+    setTriggerPackQty(
+      templateItem.triggerPackQty !== undefined && templateItem.triggerPackQty !== null
+        ? String(templateItem.triggerPackQty)
+        : ''
+    );
+    setFixedOrderPackQty(
+      templateItem.fixedOrderPackQty !== undefined && templateItem.fixedOrderPackQty !== null
+        ? String(templateItem.fixedOrderPackQty)
+        : ''
+    );
+    setReceiverLoginId(templateItem.receiverLoginId || '');
+    setReceiverName(templateItem.receiverName || '');
+    setReceiverPhone(templateItem.receiverPhone || '');
+    setDeliveryDetailLocation(templateItem.deliveryDetailLocation || '');
+  };
 
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const isCategoryQtyBased = selectedCategory?.orderPolicyType === 'QTY_BASED';
@@ -179,6 +223,31 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs sm:text-sm overflow-y-auto">
+          
+          {/* [신규 기능] 기존 등록 품목 복사(템플릿) 셀렉터 영역 (신규 등록 시에만 노출) */}
+          {!editingItem && allItems.length > 0 && (
+            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-blue-950">
+                <Copy className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>기존 품목 복사 (템플릿 불러오기)</span>
+              </div>
+              <div className="w-full sm:w-72">
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleApplyTemplate(e.target.value)}
+                  className="w-full border border-blue-300 rounded-md p-1.5 bg-white text-xs text-slate-900 font-semibold focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">-- 기존 품목 선택하여 불러오기 --</option>
+                  {allItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      [{item.line}] {item.itemName} ({item.spec})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* Row 1: Line & Category */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -366,7 +435,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             </p>
           </div>
 
-          {/* Row: Quantity-based Replenishment Settings (Displayed when category is QTY_BASED) */}
+          {/* Row: Quantity-based Replenishment Settings */}
           {isCategoryQtyBased && (
             <div className="p-3.5 bg-emerald-50/80 border border-emerald-300 rounded-lg space-y-2.5">
               <div className="flex items-center justify-between flex-wrap gap-1">
@@ -393,9 +462,6 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                     placeholder={`미입력 시 카테고리 기본값 (${selectedCategory?.defaultTriggerPackQty ?? 5} ${packUnit})`}
                     className="w-full border border-emerald-300 rounded p-2 bg-white text-slate-900 font-mono font-bold focus:ring-1 focus:ring-emerald-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    현장 실사 재고가 이 수량 이하로 떨어지면 자동으로 '발주 필요'로 판정됩니다.
-                  </p>
                 </div>
 
                 <div>
@@ -411,9 +477,6 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                     placeholder={`미입력 시 카테고리 기본값 (${selectedCategory?.defaultOrderPackQty ?? 10} ${packUnit})`}
                     className="w-full border border-emerald-300 rounded p-2 bg-white text-slate-900 font-mono font-bold focus:ring-1 focus:ring-emerald-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    발주서 작성 시 권장 발주량으로 자동 채워질 고정 수량입니다.
-                  </p>
                 </div>
               </div>
             </div>
@@ -492,15 +555,12 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
             </div>
           </div>
 
-          {/* Row 7: 현장 수령 담당자 ([계정 관리] 드롭다운 연동) & 세부 하역위치 */}
+          {/* Row 7: Receiver & Location */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
                 수령자(담당자) 지정 & 납품장소 ([계정 관리] 연동)
-              </span>
-              <span className="text-[11px] text-slate-500">
-                [계정 관리]에 등록된 사용자 목록에서 수령 담당자를 선택합니다.
               </span>
             </div>
 
@@ -555,16 +615,7 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <label className="text-slate-800 font-bold text-xs flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                    <span>품목/라인별 수령장소 (개별 지정 오버라이드)</span>
-                    {deliveryDetailLocation.trim() ? (
-                      <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
-                        개별 지정됨
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[10px] font-semibold">
-                        카테고리·라인 기본값 자동 적용
-                      </span>
-                    )}
+                    <span>품목/라인별 수령장소</span>
                   </label>
                   {deliveryDetailLocation.trim() && (
                     <button
@@ -588,51 +639,6 @@ export const NewItemModal: React.FC<NewItemModalProps> = ({
                   onChange={(e) => setDeliveryDetailLocation(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 bg-white focus:ring-2 focus:ring-blue-500 font-normal"
                 />
-
-                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                  <span className="text-slate-500">
-                    현재 [{line}] 기본 수령장소:{' '}
-                    <strong className="text-slate-800 font-medium">
-                      {getDefaultDeliveryLocationForLine(line, selectedCategory)}
-                    </strong>
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1">
-                    <span className="text-slate-400 mr-0.5">빠른 지정:</span>
-                    {(line === '아산공장'
-                      ? [
-                          '아산공장 SL라인 진입부',
-                          '아산공장 SL라인 세척패드 보관대',
-                          '아산공장 출하장 목재야적장',
-                        ]
-                      : line === 'SL1'
-                      ? [
-                          '포승공장 SL1라인 작업대 (1번 랙)',
-                          '포승공장 SL1라인 결속구간',
-                          '포승공장 SL1라인 출측 적치장',
-                        ]
-                      : line === 'SL2'
-                      ? [
-                          '포승공장 SL2라인 작업대 (2번 랙)',
-                          '포승공장 SL2라인 결속구간',
-                          '포승공장 SL2라인 출측 적치장',
-                        ]
-                      : [
-                          '포승공장 출하1번홈 (목재야적장)',
-                          '포승공장 포장장 결속대 (도크 2번)',
-                          '공용포장장 부자재실 (선반 3번)',
-                        ]
-                    ).map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setDeliveryDetailLocation(preset)}
-                        className="px-2 py-0.5 rounded bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-300 text-[10px] transition-colors cursor-pointer"
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
