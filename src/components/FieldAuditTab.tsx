@@ -316,7 +316,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
   };
 
   const isTopAdminUser = useMemo(() => {
-    if (!currentUser) return true;
+    if (!currentUser) return false;
     if (currentUser.level === 0 || currentUser.username === 'admin') return true;
     if ((currentUser.roleLabel || '').includes('최고관리자')) return true;
     return false;
@@ -631,7 +631,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                 </select>
               </div>
 
-              {onOpenNewItemModal && (currentUser?.level ?? 0) === 0 && (
+              {onOpenNewItemModal && isTopAdminUser && (
                 <button
                   type="button"
                   onClick={onOpenNewItemModal}
@@ -706,7 +706,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
               </div>
             </div>
 
-            {/* 우측: 상태 요약 배지 + 지연품목 필터/일괄 실사완료 + 변경 취소 + 실사 변경사항 저장 */}
+            {/* 우측: 상태 요약 배지 + 지연품목 필터/일괄 실사완료(LV.0 전용) + 변경 취소 + 실사 변경사항 저장 */}
             <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto">
               {/* 상태 요약 배지 (툴팁으로 기존 안내 문구 제공) */}
               <div className="hidden xl:flex items-center gap-1.5 mr-1">
@@ -774,7 +774,8 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                 </button>
               )}
 
-              {totalAuditDelayedCount > 0 && onConfirmAuditWithoutChange && (
+              {/* 🔒 [최고관리자 LV.0 전용] 지연품목 일괄 실사완료 버튼 (일반 작업자/현장관리자 노출 차단) */}
+              {isTopAdminUser && !isWorkerMode && totalAuditDelayedCount > 0 && onConfirmAuditWithoutChange && (
                 <button
                   type="button"
                   onClick={() => {
@@ -783,7 +784,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       .map((i) => i.id);
                     if (delayedIds.length > 0) {
                       const isConfirmed = window.confirm(
-                        `[일괄 실사완료 확인]\n\n현재 실사 지연/누락 상태인 ${delayedIds.length}개 품목의 수량이 현장 실물과 모두 동일합니까?\n\n확인을 누르면 ${delayedIds.length}건 모두 금일자로 실사 완료 처리됩니다.`
+                        `[최고관리자 전용 · 일괄 실사완료 확인]\n\n현재 실사 지연/누락 상태인 ${delayedIds.length}개 품목의 수량이 현장 실물과 모두 동일합니까?\n\n확인을 누르면 ${delayedIds.length}건 모두 금일자로 실사 완료 처리됩니다.`
                       );
                       if (isConfirmed) {
                         onConfirmAuditWithoutChange(delayedIds);
@@ -792,7 +793,7 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                     }
                   }}
                   className="px-2.5 py-1.5 rounded-md text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95 transition-transform whitespace-nowrap"
-                  title="현재 전산 수량과 현장 실물이 동일한 본인 담당 지연 품목들의 실사일시를 금일자로 일괄 갱신합니다"
+                  title="[LV.0 최고관리자 전용] 현재 전산 수량과 현장 실물이 동일한 지연 품목들의 실사일시를 금일자로 일괄 갱신합니다"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>지연품목 일괄 실사완료</span>
