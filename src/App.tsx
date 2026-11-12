@@ -103,9 +103,19 @@ export default function App() {
     ensureDefaultAdminAccount(INITIAL_USER_ACCOUNTS)
   );
 
-  // 최고관리자(admin) 초기 비밀번호 1234 기본 보장
-  const [userPasswords, setUserPasswords] = useState<Record<string, string>>({
-    admin: '1234',
+  // 최고관리자(admin) 초기 비밀번호 1234 기본 보장 + 세션 복원 계정의 비밀번호 초기 반영
+  const [userPasswords, setUserPasswords] = useState<Record<string, string>>(() => {
+    const initialMap: Record<string, string> = { admin: '1234' };
+    try {
+      const saved = sessionStorage.getItem('ds_mro_current_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.username && parsed?.password) {
+          initialMap[parsed.username] = parsed.password;
+        }
+      }
+    } catch (e) {}
+    return initialMap;
   });
   const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
   const [isDbConfigModalOpen, setIsDbConfigModalOpen] = useState(false);
@@ -114,6 +124,11 @@ export default function App() {
     return Boolean(cfg.url && cfg.anonKey);
   });
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  // 새로고침 직후 클라우드 DB에서 계정/비밀번호를 받아오기 전까지 초기비번 모달이 깜빡이는 현상 방지
+  const [hasInitialCloudSynced, setHasInitialCloudSynced] = useState<boolean>(() => {
+    const cfg = getSavedSupabaseConfig();
+    return !Boolean(cfg.url && cfg.anonKey);
+  });
 
   // [기능 4] 현장 작업자용 간소화 모드(Worker View) 상태
   const [isWorkerMode, setIsWorkerMode] = useState<boolean>(() => {
@@ -234,7 +249,10 @@ export default function App() {
   // ---------------------------------------------------------------------------
   const syncFromSupabaseCloud = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!isDbConnected) return;
+      if (!isDbConnected) {
+        setHasInitialCloudSynced(true);
+        return;
+      }
       setIsCloudSyncing(true);
       try {
         const snapshot = await fetchAllCloudDataFromSupabase();
@@ -269,11 +287,19 @@ export default function App() {
               (a) => a.id === prevUser.id || a.username === prevUser.username
             );
             if (refreshed) {
+              const mergedUser: UserAccount = {
+                ...refreshed,
+                password:
+                  snapshot.userPasswords?.[refreshed.username] ||
+                  refreshed.password ||
+                  prevUser.password,
+              };
               try {
-                sessionStorage.setItem('ds_mro_current_user', JSON.stringify(refreshed));
+                sessionStorage.setItem('ds_mro_current_user', JSON.stringify(mergedUser));
               } catch (e) {}
+              return mergedUser;
             }
-            return refreshed || prevUser;
+            return prevUser;
           });
         }
 
@@ -295,6 +321,7 @@ export default function App() {
         }
       } finally {
         setIsCloudSyncing(false);
+        setHasInitialCloudSynced(true);
       }
     },
     [isDbConnected, showToast]
@@ -383,13 +410,22 @@ export default function App() {
   }, [items, categories, vendors]);
 
   // 최고관리자(admin, LV.0)는 초기비번 1234로 즉시 접속 가능하도록 강제 변경 대상에서 제외
+  // 새로고침 직후 클라우드 DB 동기화가 완료되기 전에는 모달이 깜빡이지 않도록 차단
   const mustChangePassword = useMemo(() => {
     if (!currentUser) return false;
     if (currentUser.username === 'admin' || currentUser.level === 0) return false;
-    const storedPw = userPasswords[currentUser.username];
-    const isPassword1234 = !storedPw || storedPw === '1234';
-    return isPassword1234;
-  }, [currentUser, userPasswords]);
+    if (!hasInitialCloudSynced) return false;
+
+    const matchedAccount = userAccounts.find((a) => a.username === currentUser.username);
+    const storedPw =
+      userPasswords[currentUser.username] ??
+      matchedAccount?.password ??
+      currentUser.password;
+
+    // 아직 비밀번호 정보가 로드되지 않은 상태라면 깜빡임 방지를 위해 false 반환
+    if (storedPw === undefined) return false;
+    return storedPw === '1234';
+  }, [currentUser, userPasswords, userAccounts, hasInitialCloudSynced]);
 
   const orderNeededCount = calculatedItems.filter((i) => i.needsOrder).length;
   const awaitingArrivalCount = calculatedItems.filter(
@@ -398,9 +434,11 @@ export default function App() {
   const auditDelayedCount = calculatedItems.filter((i) => i.isAuditDelayed).length;
 
   const handleLogin = (user: UserAccount) => {
-    setCurrentUser(user);
+    const resolvedPw = userPasswords[user.username] || user.password || '1234';
+    const userWithPw: UserAccount = { ...user, password: resolvedPw };
+    setCurrentUser(userWithPw);
     try {
-      sessionStorage.setItem('ds_mro_current_user', JSON.stringify(user));
+      sessionStorage.setItem('ds_mro_current_user', JSON.stringify(userWithPw));
     } catch (e) {}
 
     if (user.level === 2) {
@@ -420,11 +458,10 @@ export default function App() {
     // 로그인 시 클라우드 최신 데이터 즉시 동기화
     void syncFromSupabaseCloud({ silent: true });
 
-    const storedPw = userPasswords[user.username];
     const isInitialOrReset =
       user.username !== 'admin' &&
       user.level !== 0 &&
-      (!storedPw || storedPw === '1234');
+      resolvedPw === '1234';
 
     const roleText = user.roleLabel || `LV.${user.level}`;
     const displayName = user.title ? `${user.name} ${user.title}` : user.name;
@@ -471,6 +508,14 @@ export default function App() {
         acc.username === username ? { ...acc, password: newPassword } : acc
       )
     );
+
+    if (currentUser && currentUser.username === username) {
+      const updatedUser: UserAccount = { ...currentUser, password: newPassword };
+      setCurrentUser(updatedUser);
+      try {
+        sessionStorage.setItem('ds_mro_current_user', JSON.stringify(updatedUser));
+      } catch (e) {}
+    }
 
     recordAuditLog({
       actionType: 'ACCOUNT_MUTATE',
@@ -1298,6 +1343,13 @@ export default function App() {
 
   const handleConfirmAuditWithoutChange = async (itemIds: string[]) => {
     if (itemIds.length === 0) return;
+
+    // 2건 이상 일괄 실사완료는 최고관리자(LV.0)만 가능하도록 이중 방어
+    if (itemIds.length > 1 && (currentUser?.level ?? 99) !== 0 && currentUser?.username !== 'admin') {
+      showToast('⚠️ 지연품목 일괄 실사완료 기능은 LV.0 최고관리자만 실행할 수 있습니다.');
+      return;
+    }
+
     const now = new Date();
     const timeStr = `${TODAY_STR} ${String(now.getHours()).padStart(2, '0')}:${String(
       now.getMinutes()
