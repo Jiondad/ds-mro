@@ -34,6 +34,7 @@ interface AuditLogTabProps {
   logs: AuditLogRecord[];
   currentUser?: UserAccount | null;
   onClearLogs?: () => void;
+  onRevertLog?: (log: AuditLogRecord) => void;
   onShowToast: (message: string) => void;
 }
 
@@ -44,6 +45,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
   logs,
   currentUser,
   onClearLogs,
+  onRevertLog,
   onShowToast,
 }) => {
   const isSuperAdmin = currentUser?.level === 0 || currentUser?.username === 'admin';
@@ -61,6 +63,28 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
 
   // Selected log for detail modal
   const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
+
+  // 해당 로그가 되돌리기(Rollback) 가능한지 판별
+  const canRevertLogEntry = (log: AuditLogRecord): boolean => {
+    if (!isSuperAdmin || !onRevertLog) return false;
+    if (log.isReverted) return false;
+    if (log.details?.includes('[되돌리기 완료]') || log.targetName.startsWith('[되돌리기 복원]')) {
+      return false;
+    }
+    if (log.prevItemsSnapshot && log.prevItemsSnapshot.length > 0) return true;
+
+    // 스냅샷 도입 이전 기존 로그 호환: 일괄 실사확정(변동없음 확인) 또는 개별 재고수량 변경
+    if (
+      log.actionType === 'STOCK_BATCH_AUDIT' &&
+      (log.afterValue.includes('실사확정') || log.beforeValue.includes('실사 대기'))
+    ) {
+      return true;
+    }
+    if (log.actionType === 'STOCK_UPDATE' && log.targetId) {
+      return true;
+    }
+    return false;
+  };
 
   // Distinct operators list for filter dropdown
   const distinctOperators = useMemo(() => {
@@ -308,7 +332,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 자재 재고 실사, 입고 확정, 거래처 발주, 안전재고 보정 및 계정 관리 등 시스템 내 모든 수정·삭제 작업의
-                작업자와 변경 전·후(Before &amp; After) 상태를 투명하게 영구 기록합니다.
+                작업자와 변경 전·후(Before & After) 상태를 투명하게 영구 기록합니다.
               </p>
             </div>
           </div>
@@ -352,7 +376,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
 
           <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200">
             <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="font-semibold">📥 발주 &amp; 입고확정</span>
+              <span className="font-semibold">📥 발주 & 입고확정</span>
               <Truck className="w-3.5 h-3.5 text-emerald-600" />
             </div>
             <div className="font-mono font-black text-sm sm:text-base text-slate-900 tabular-nums">
@@ -540,7 +564,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               <span className="font-bold text-blue-700">필터 적용 중:</span>
               {searchQuery && (
                 <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded text-[11px] border border-blue-200">
-                  검색: &quot;{searchQuery}&quot;
+                  검색: "{searchQuery}"
                 </span>
               )}
               {selectedGroup !== 'all' && (
@@ -585,7 +609,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                 <th className="py-2.5 px-3 min-w-[200px]">대상 항목 (Target Entity)</th>
                 <th className="py-2.5 px-3 min-w-[260px]">변경 전 / 변경 후 (Before → After)</th>
                 <th className="py-2.5 px-3 min-w-[160px]">상세 내역 / 비고</th>
-                <th className="py-2.5 px-3 text-center w-16 shrink-0">상세</th>
+                <th className="py-2.5 px-3 text-center w-28 shrink-0">상세 / 복구</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -613,12 +637,17 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               ) : (
                 filteredLogs.map((log, index) => {
                   const meta = getAuditActionMeta(log.actionType);
+                  const revertible = canRevertLogEntry(log);
+                  const isAlreadyReverted =
+                    Boolean(log.isReverted) || Boolean(log.details?.includes('[되돌리기 완료]'));
 
                   return (
                     <tr
                       key={log.id}
                       onClick={() => setSelectedLog(log)}
-                      className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
+                      className={`transition-colors cursor-pointer group ${
+                        isAlreadyReverted ? 'bg-slate-50/70 opacity-75' : 'hover:bg-blue-50/40'
+                      }`}
                     >
                       {/* No. */}
                       <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px] tabular-nums">
@@ -697,18 +726,41 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                         )}
                       </td>
 
-                      {/* Detail View Button */}
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedLog(log);
-                          }}
-                          className="px-2 py-1 text-[11px] font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-100 rounded transition-colors cursor-pointer group-hover:bg-blue-600 group-hover:text-white"
-                        >
-                          보기
-                        </button>
+                      {/* Detail View & Revert Button */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLog(log);
+                            }}
+                            className="px-2 py-1 text-[11px] font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-100 rounded transition-colors cursor-pointer group-hover:bg-blue-600 group-hover:text-white"
+                          >
+                            보기
+                          </button>
+
+                          {isAlreadyReverted ? (
+                            <span className="px-1.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded border border-slate-200">
+                              복구됨
+                            </span>
+                          ) : (
+                            revertible && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRevertLog?.(log);
+                                }}
+                                className="px-2 py-1 text-[11px] font-bold text-amber-900 bg-amber-100 hover:bg-amber-500 hover:text-slate-950 border border-amber-300 rounded transition-colors cursor-pointer flex items-center gap-0.5 shadow-2xs"
+                                title="이 작업을 실행하기 이전 상태로 되돌립니다 (Rollback)"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>되돌리기</span>
+                              </button>
+                            )
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -816,7 +868,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               {/* Before vs After Side-by-Side Comparison */}
               <div>
                 <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-2">
-                  데이터 변경 비교 (Before &amp; After Diff)
+                  데이터 변경 비교 (Before & After Diff)
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Before */}
@@ -859,17 +911,33 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
               <span className="text-[11px] text-slate-400 font-mono">
                 Log ID: {selectedLog.id}
               </span>
-              <button
-                type="button"
-                onClick={() => setSelectedLog(null)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-              >
-                닫기
-              </button>
+              <div className="flex items-center gap-2">
+                {canRevertLogEntry(selectedLog) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = selectedLog;
+                      setSelectedLog(null);
+                      onRevertLog?.(target);
+                    }}
+                    className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>이 작업 되돌리기 (복원)</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedLog(null)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
         </div>
