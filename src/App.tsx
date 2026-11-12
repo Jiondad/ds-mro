@@ -189,13 +189,20 @@ export default function App() {
     }, 3500);
   }, []);
 
-  // 데이터 변경 이력(Audit Log) 생성 및 Supabase 즉시 저장 헬퍼
+  // 데이터 변경 이력(Audit Log) 생성 및 Supabase 즉시 저장 헬퍼 (변경 전 품목 스냅샷 포함 지원)
   const recordAuditLog = useCallback(
-    (params: Omit<CreateAuditLogParams, 'currentUser'>) => {
-      const entry = createAuditLogEntry({
+    (
+      params: Omit<CreateAuditLogParams, 'currentUser'> & {
+        prevItemsSnapshot?: InventoryItem[];
+      }
+    ) => {
+      const baseEntry = createAuditLogEntry({
         ...params,
         currentUser,
       });
+      const entry: AuditLogRecord = params.prevItemsSnapshot
+        ? { ...baseEntry, prevItemsSnapshot: params.prevItemsSnapshot }
+        : baseEntry;
       setAuditLogs((prev) => {
         const next = [entry, ...prev].slice(0, 2000);
         void insertAuditLogToSupabase(entry, next);
@@ -864,6 +871,7 @@ export default function App() {
         beforeValue: prevReceiver,
         afterValue: '수령자 지정 해제',
         details: `[${targetItem.itemName}] 수령자 지정 해제`,
+        prevItemsSnapshot: [{ ...targetItem }],
       });
 
       showToast(`💾 [${targetItem.itemName}] 수령자(담당자) 지정 해제 내용이 클라우드 DB에 저장되었습니다.`);
@@ -895,6 +903,7 @@ export default function App() {
       beforeValue: prevReceiver,
       afterValue: `${fullDisplayName} (${account.username})`,
       details: `[${targetItem.itemName}] 수령자 '${fullDisplayName}' 지정`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     showToast(
@@ -933,6 +942,7 @@ export default function App() {
       beforeValue: targetItem.deliveryDetailLocation || `기본값 (${defaultLoc})`,
       afterValue: trimmed || `기본값 (${defaultLoc})`,
       details: `[${targetItem.itemName}] 수령장소 변경`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     if (trimmed) {
@@ -972,6 +982,7 @@ export default function App() {
       beforeValue: targetItem.line,
       afterValue: newLine,
       details: `[${targetItem.itemName}] 담당 라인 '${targetItem.line}' → '${newLine}' 변경`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     showToast(
@@ -1072,6 +1083,7 @@ export default function App() {
       beforeValue: `${targetItem.currentPackStock} ${targetItem.packUnit}`,
       afterValue: `${newPackStock} ${targetItem.packUnit}`,
       details: `[${targetItem.itemName}] 현재고 ${targetItem.currentPackStock} → ${newPackStock} ${targetItem.packUnit} 변경`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
   };
 
@@ -1101,6 +1113,7 @@ export default function App() {
       beforeValue: `일소모 ${targetItem.dailyUsage} ${targetItem.baseUnit}`,
       afterValue: `일소모 ${newDailyUsage} ${targetItem.baseUnit}`,
       details: `[${targetItem.itemName}] 기준 일소모량 ${targetItem.dailyUsage} → ${newDailyUsage} ${targetItem.baseUnit} 수정`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
   };
 
@@ -1158,6 +1171,7 @@ export default function App() {
       beforeValue: targetItem.orderStatus,
       afterValue: newStatus,
       details: `[${targetItem.itemName}] 발주 상태 '${targetItem.orderStatus}' → '${newStatus}' 전환`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     showToast(`발주 진행상태가 '${newStatus}' 상태로 변경되어 클라우드 DB에 저장되었습니다.`);
@@ -1188,10 +1202,12 @@ export default function App() {
     const newLogs: UsageLog[] = [];
     const beforeSummaryParts: string[] = [];
     const afterSummaryParts: string[] = [];
+    const prevSnapshot: InventoryItem[] = [];
 
     items.forEach((item) => {
       const newStock = changes[item.id];
       if (newStock !== undefined) {
+        prevSnapshot.push({ ...item });
         beforeSummaryParts.push(`${item.itemName}: ${item.currentPackStock}${item.packUnit}`);
         afterSummaryParts.push(`${item.itemName}: ${newStock}${item.packUnit}`);
       }
@@ -1272,6 +1288,7 @@ export default function App() {
         afterSummaryParts.slice(0, 5).join(', ') +
         (changeCount > 5 ? ` 외 ${changeCount - 5}건` : ''),
       details: `총 ${changeCount}개 소모품 현장 실사재고 일괄 확정 반영`,
+      prevItemsSnapshot: prevSnapshot,
     });
 
     showToast(
@@ -1293,10 +1310,12 @@ export default function App() {
       : undefined;
     const baseMs = Date.now();
 
+    const prevSnapshot: InventoryItem[] = [];
     let offset = 0;
     const updatedBatch: InventoryItem[] = [];
     const nextItems = items.map((it) => {
       if (itemIds.includes(it.id)) {
+        prevSnapshot.push({ ...it });
         offset += 1;
         const updated: InventoryItem = {
           ...it,
@@ -1332,11 +1351,176 @@ export default function App() {
       beforeValue: '실사 대기/지연',
       afterValue: `${auditLabel} (수량 변동 없음)`,
       details: `총 ${itemIds.length}개 품목 실사 완료(수량 변동 없음) 확정`,
+      prevItemsSnapshot: prevSnapshot,
     });
 
     showToast(
       `✅ [실사 완료 처리] 총 ${itemIds.length}개 품목의 실사 일시가 금일(${TODAY_STR}) 기준으로 클라우드 DB에 갱신되었습니다.`
     );
+  };
+
+  // [변경 이력 되돌리기 (Rollback)] 스냅샷 복원 및 기존 324번 일괄 실사확정 로그 즉시 복구 지원
+  const handleRevertAuditLog = async (log: AuditLogRecord) => {
+    if ((currentUser?.level ?? 99) !== 0 && currentUser?.username !== 'admin') {
+      showToast('⚠️ 변경 이력 되돌리기(복원) 권한은 LV.0 최고관리자에게만 있습니다.');
+      return;
+    }
+
+    if (log.isReverted || log.details?.includes('[되돌리기 완료]')) {
+      showToast('⚠️ 이미 되돌리기(복원) 처리된 이력입니다.');
+      return;
+    }
+
+    // 1. 스냅샷이 저장된 이력인 경우: prevItemsSnapshot으로 100% 정확히 복원
+    if (log.prevItemsSnapshot && log.prevItemsSnapshot.length > 0) {
+      const confirmMsg = `[변경 이력 되돌리기 확인]\n\n대상: ${log.targetName}\n변경 전: ${log.beforeValue}\n변경 후: ${log.afterValue}\n\n이 작업을 실행하기 이전 상태로 되돌리시겠습니까?`;
+      if (!window.confirm(confirmMsg)) return;
+
+      const snapshotMap = new Map(log.prevItemsSnapshot.map((it) => [it.id, it]));
+      const restoredBatch: InventoryItem[] = [];
+      const nextItems = items.map((it) => {
+        const snap = snapshotMap.get(it.id);
+        if (snap) {
+          restoredBatch.push(snap);
+          return snap;
+        }
+        return it;
+      });
+
+      // 삭제되었던 품목 복원인 경우
+      log.prevItemsSnapshot.forEach((snap) => {
+        if (!nextItems.some((it) => it.id === snap.id)) {
+          restoredBatch.push(snap);
+          nextItems.unshift(snap);
+        }
+      });
+
+      const res = await batchUpsertInventoryItemsToSupabase(restoredBatch, nextItems);
+      if (!res.ok) {
+        showToast(`❌ [되돌리기 DB 저장 실패] ${res.errorMessage}`);
+        return;
+      }
+
+      setItems(nextItems);
+      setAuditLogs((prev) =>
+        prev.map((l) =>
+          l.id === log.id
+            ? { ...l, isReverted: true, details: `${l.details || ''} [되돌리기 완료]`.trim() }
+            : l
+        )
+      );
+
+      recordAuditLog({
+        actionType: log.actionType,
+        targetName: `[되돌리기 복원] ${log.targetName}`,
+        beforeValue: log.afterValue,
+        afterValue: log.beforeValue,
+        details: `로그(${log.timestamp}) 작업 이전 상태로 원상복구 완료 (${restoredBatch.length}건)`,
+      });
+
+      showToast(`↩️ [되돌리기 완료] '${log.targetName}' 작업 이전 상태로 복원되었습니다.`);
+      return;
+    }
+
+    // 2. 스냅샷 도입 이전에 이미 찍힌 '실사 변동없음 확인 (N개 품목)' (예: 324번 이력) 복원
+    if (
+      log.actionType === 'STOCK_BATCH_AUDIT' &&
+      (log.afterValue.includes('실사확정') || log.beforeValue.includes('실사 대기'))
+    ) {
+      const stampMatch = log.afterValue.match(/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s*실사확정)/);
+      const targetStamp = stampMatch ? stampMatch[1].trim() : '';
+      const countMatch = log.targetName.match(/\((\d+)개/);
+      const expectedCount = countMatch ? Number(countMatch[1]) : 0;
+
+      let matchedItems = targetStamp
+        ? items.filter((it) => (it.lastAuditDate || '').trim() === targetStamp)
+        : [];
+
+      if (matchedItems.length === 0 && expectedCount > 0) {
+        const sortedByRecent = [...items]
+          .filter((it) => Boolean(it.lastAuditDate))
+          .sort((a, b) => (b.lastAuditUpdatedAt || 0) - (a.lastAuditUpdatedAt || 0));
+        matchedItems = sortedByRecent.slice(0, expectedCount);
+      }
+
+      if (matchedItems.length === 0) {
+        showToast('⚠️ 되돌릴 대상 품목(해당 실사일시 보유 품목)을 찾을 수 없습니다.');
+        return;
+      }
+
+      const confirmMsg = `[일괄 실사확정 되돌리기]\n\n대상: ${log.targetName}\n일시: ${targetStamp || log.timestamp}\n복원 대상: 총 ${matchedItems.length}개 품목\n\n실수로 일괄 확정된 ${matchedItems.length}개 품목의 실사일시를 초기화하여 원래의 '실사 지연/누락' 상태로 되돌리시겠습니까?`;
+      if (!window.confirm(confirmMsg)) return;
+
+      const targetIds = new Set(matchedItems.map((i) => i.id));
+      const restoredBatch: InventoryItem[] = [];
+      const nextItems = items.map((it) => {
+        if (targetIds.has(it.id)) {
+          const restored: InventoryItem = {
+            ...it,
+            lastAuditDate: null,
+            lastAuditedBy: null,
+            lastAuditUpdatedAt: null,
+          };
+          restoredBatch.push(restored);
+          return restored;
+        }
+        return it;
+      });
+
+      const res = await batchUpsertInventoryItemsToSupabase(restoredBatch, nextItems);
+      if (!res.ok) {
+        showToast(`❌ [되돌리기 DB 저장 실패] ${res.errorMessage}`);
+        return;
+      }
+
+      setItems(nextItems);
+      setAuditLogs((prev) =>
+        prev.map((l) =>
+          l.id === log.id
+            ? { ...l, isReverted: true, details: `${l.details || ''} [되돌리기 완료]`.trim() }
+            : l
+        )
+      );
+
+      recordAuditLog({
+        actionType: 'STOCK_BATCH_AUDIT',
+        targetName: `[되돌리기 복원] ${log.targetName}`,
+        beforeValue: log.afterValue,
+        afterValue: '실사 대기/지연 (미실사 상태 복원)',
+        details: `실수로 일괄 실사확정된 ${restoredBatch.length}개 품목 미실사(지연) 상태로 원상복구 완료`,
+      });
+
+      showToast(
+        `↩️ [되돌리기 완료] 총 ${restoredBatch.length}개 품목이 실사 지연(미실사) 상태로 원상복구되었습니다.`
+      );
+      return;
+    }
+
+    // 3. 스냅샷 도입 이전 단일 품목 재고 수량 변경 (STOCK_UPDATE) 복원
+    if (log.actionType === 'STOCK_UPDATE' && log.targetId) {
+      const targetItem = items.find((i) => i.id === log.targetId);
+      const numMatch = log.beforeValue.match(/([0-9]+(\.[0-9]+)?)/);
+      if (targetItem && numMatch) {
+        const prevQty = Number(numMatch[1]);
+        if (
+          !window.confirm(
+            `[${targetItem.itemName}] 재고 수량을 변경 전 값(${prevQty} ${targetItem.packUnit})으로 되돌리시겠습니까?`
+          )
+        ) {
+          return;
+        }
+        await handleUpdateStock(targetItem.id, prevQty);
+        setAuditLogs((prev) =>
+          prev.map((l) => (l.id === log.id ? { ...l, isReverted: true } : l))
+        );
+        showToast(
+          `↩️ [${targetItem.itemName}] 재고 수량이 ${prevQty} ${targetItem.packUnit}(으)로 복원되었습니다.`
+        );
+        return;
+      }
+    }
+
+    showToast('⚠️ 이 이력 항목은 자동 되돌리기를 지원하지 않는 유형입니다.');
   };
 
   const handleApplyActualDailyUsage = async (itemId: string, actualDailyUsage: number) => {
@@ -1365,6 +1549,7 @@ export default function App() {
       beforeValue: `기준 일소모 ${targetItem.dailyUsage} ${targetItem.baseUnit}`,
       afterValue: `실측 보정 ${actualDailyUsage} ${targetItem.baseUnit}`,
       details: `[${targetItem.itemName}] 안전재고 실측 일소모량(${actualDailyUsage}) 반영`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
   };
 
@@ -1372,9 +1557,11 @@ export default function App() {
     const count = Object.keys(updates).length;
     if (count === 0) return;
 
+    const prevSnapshot: InventoryItem[] = [];
     const updatedBatch: InventoryItem[] = [];
     const nextItems = items.map((it) => {
       if (updates[it.id] !== undefined) {
+        prevSnapshot.push({ ...it });
         const updated: InventoryItem = { ...it, dailyUsage: updates[it.id] };
         updatedBatch.push(updated);
         return updated;
@@ -1396,6 +1583,7 @@ export default function App() {
       beforeValue: `기존 기준 일소모량 (${count}건)`,
       afterValue: `실측 기반 추천 일소모량 일괄 적용 (${count}건)`,
       details: `편차 ±20% 이상 품목 ${count}건 기준 일소모량 일괄 보정`,
+      prevItemsSnapshot: prevSnapshot,
     });
 
     showToast(
@@ -1528,6 +1716,7 @@ export default function App() {
       beforeValue: `입고전 잔여 ${baseRemaining} ${targetItem.packUnit}`,
       afterValue: `입고 +${incoming} → 최종 ${finalStock} ${targetItem.packUnit}`,
       details: `[${targetItem.itemName}] 입고확정 (+${incoming} ${targetItem.packUnit}, 최종 ${finalStock} ${targetItem.packUnit})`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     showToast(
@@ -1548,10 +1737,12 @@ export default function App() {
     }
 
     const finalOrderDate = orderDate || TODAY_STR;
+    const prevSnapshot: InventoryItem[] = [];
     const updatedBatch: InventoryItem[] = [];
 
     const nextItems = items.map((it) => {
       if (itemIds.includes(it.id)) {
+        prevSnapshot.push({ ...it });
         const updated: InventoryItem = {
           ...it,
           orderStatus: '발주완료(입고대기)',
@@ -1631,6 +1822,7 @@ export default function App() {
       beforeValue: '발주대기',
       afterValue: `발주완료(입고예정: ${expectedArrivalDate}) · ${orderedNames.slice(0, 4).join(', ')}`,
       details: `총 ${itemIds.length}개 품목 신규 발주 확정 (입고예정일: ${expectedArrivalDate})`,
+      prevItemsSnapshot: prevSnapshot,
     });
 
     showToast(
@@ -1704,6 +1896,7 @@ export default function App() {
       beforeValue: `수량 ${targetItem.orderedPackQty || 0}${targetItem.packUnit} / 예정 ${targetItem.expectedArrivalDate || '-'}`,
       afterValue: `수량 ${orderedPackQty}${targetItem.packUnit} / 예정 ${expectedArrivalDate}`,
       details: `[${targetItem.itemName}] 발주 수량 및 입고예정일 변경`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     showToast(`✅ [${targetItem.itemName}] 발주 정보(일정 및 수량)가 클라우드 DB에 변경·저장되었습니다.`);
@@ -1766,6 +1959,7 @@ export default function App() {
       beforeValue: `발주완료(입고대기) · ${targetItem.orderedPackQty || 0}${targetItem.packUnit}`,
       afterValue: '발주취소 (발주대기 복구)',
       details: `[${targetItem.itemName}] 진행 중인 발주 취소`,
+      prevItemsSnapshot: [{ ...targetItem }],
     });
 
     showToast(`✅ [${targetItem.itemName}] 발주가 취소되었으며, 클라우드 DB에 발주대기 상태로 복구되었습니다.`);
@@ -1887,6 +2081,7 @@ export default function App() {
       details: prevItem
         ? `소모품 '${item.itemName}' 마스터 정보 수정`
         : `신규 소모품 '${item.itemName}' 등록`,
+      prevItemsSnapshot: prevItem ? [{ ...prevItem }] : undefined,
     });
 
     showToast(`💾 소모품 '${item.itemName}' 정보가 클라우드 DB에 안전하게 저장되었습니다.`);
@@ -1913,6 +2108,7 @@ export default function App() {
       beforeValue: `${it.line} · 현재고 ${it.currentPackStock}${it.packUnit}`,
       afterValue: '품목 영구 삭제됨',
       details: `소모품 '${it.itemName} (${it.spec})' 마스터 삭제`,
+      prevItemsSnapshot: [{ ...it }],
     });
 
     showToast(`🗑️ '${it.itemName} (${it.spec})' 품목이 클라우드 DB에서 삭제되었습니다.`);
@@ -2363,6 +2559,7 @@ export default function App() {
             logs={auditLogs}
             currentUser={currentUser}
             onClearLogs={() => void handleClearAuditLogs()}
+            onRevertLog={(log) => void handleRevertAuditLog(log)}
             onShowToast={showToast}
           />
         )}
