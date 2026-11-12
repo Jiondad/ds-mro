@@ -782,8 +782,13 @@ export const FieldAuditTab: React.FC<FieldAuditTabProps> = ({
                       .filter((i) => i.isAuditDelayed && canUserEditItem(i))
                       .map((i) => i.id);
                     if (delayedIds.length > 0) {
-                      onConfirmAuditWithoutChange(delayedIds);
-                      setFilterOnlyAuditDelayed(false);
+                      const isConfirmed = window.confirm(
+                        `[일괄 실사완료 확인]\n\n현재 실사 지연/누락 상태인 ${delayedIds.length}개 품목의 수량이 현장 실물과 모두 동일합니까?\n\n확인을 누르면 ${delayedIds.length}건 모두 금일자로 실사 완료 처리됩니다.`
+                      );
+                      if (isConfirmed) {
+                        onConfirmAuditWithoutChange(delayedIds);
+                        setFilterOnlyAuditDelayed(false);
+                      }
                     }
                   }}
                   className="px-2.5 py-1.5 rounded-md text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer active:scale-95 transition-transform whitespace-nowrap"
