@@ -2395,6 +2395,7 @@ export default function App() {
         units={units}
         editingItem={editingItem}
         userAccounts={userAccounts}
+        allItems={calculatedItems}
       />
 
       <PurchaseOrderModal
