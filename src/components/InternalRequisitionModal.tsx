@@ -157,12 +157,20 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
 
   return (
     <>
-      {/* A4 1/3 규격(210mm × 99mm) 전용 인쇄 CSS (배경 완전 차단) */}
+      {/* 210mm × 99mm (A4 3등분 절단 용지) 전용 인쇄 CSS — 중앙 정렬 & 1장 출력 */}
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
+            size: 210mm 99mm;
             margin: 0 !important;
+          }
+          html, body {
+            width: 210mm !important;
+            height: 99mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: #ffffff !important;
           }
           body * {
             visibility: hidden !important;
@@ -175,19 +183,32 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
-            width: 210mm !important;
+            right: 0 !important;
+            width: 100% !important;
             height: 99mm !important;
-            margin: 0 !important;
+            margin: 0 auto !important;
             padding: 4mm 6mm 3mm 6mm !important;
             box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
             background: #ffffff !important;
             z-index: 99999 !important;
             overflow: hidden !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+          .requisition-print-root .req-inner-sheet {
+            width: 198mm !important;
+            max-width: 100% !important;
+            margin: 0 auto !important;
+          }
           .requisition-print-root table {
             width: 100% !important;
+            margin: 0 auto !important;
             border-collapse: collapse !important;
           }
           .requisition-print-root .req-title {
@@ -234,7 +255,7 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
               <FileCheck2 className="w-5 h-5 text-emerald-400 shrink-0" />
               <div>
                 <h2 className="text-sm sm:text-base font-bold">
-                  내부결재용 (소모품)청구서 미리보기 · 210mm × 99mm (A4 1/3)
+                  내부결재용 (소모품)청구서 미리보기 · 210mm × 99mm (A4 3등분)
                 </h2>
                 <p className="text-[11px] text-slate-400 hidden sm:block">
                   표 안의 글자나 하단 부서·성명을 클릭하면 인쇄 전 직접 수정할 수 있습니다.
@@ -347,234 +368,236 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
               </label>
             </div>
             <span className="text-[11px] text-slate-500">
-              * 총 <strong>{rows.length}</strong>개 품목 · 출력 규격: <strong>A4 세로 상단 1/3 (210mm × 99mm)</strong>
+              * 총 <strong>{rows.length}</strong>개 품목 · 용지 규격: <strong>210mm × 99mm (1매 전용)</strong>
             </span>
           </div>
 
           {/* ============================================================
-              인쇄 전용 영역 (210mm × 99mm 정확히 맞춤)
+              인쇄 전용 영역 (210mm × 99mm 정확히 중앙 정렬)
              ============================================================ */}
-          <div className="p-4 sm:p-6 bg-slate-200/70 overflow-y-auto flex-1 flex justify-center">
+          <div className="p-4 sm:p-6 bg-slate-200/70 overflow-auto flex-1">
             <div
-              className="requisition-print-root bg-white text-black font-sans shadow-md border border-slate-300 print:shadow-none print:border-none"
+              className="requisition-print-root mx-auto flex flex-col items-center justify-center bg-white text-black font-sans shadow-md border border-slate-300 print:shadow-none print:border-none"
               style={{ width: '210mm', minHeight: '99mm', padding: '4mm 6mm 3mm 6mm', boxSizing: 'border-box' }}
             >
-              {/* 메인 외곽 테두리 박스 */}
-              <table className="w-full border-collapse border-2 border-black text-center table-fixed">
-                <colgroup>
-                  <col style={{ width: '4%' }} />
-                  <col style={{ width: '7.5%' }} />
-                  <col style={{ width: '7.5%' }} />
-                  <col style={{ width: '7.5%' }} />
-                  <col style={{ width: '7.5%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '4%' }} />
-                  <col style={{ width: '7.6%' }} />
-                  <col style={{ width: '7.7%' }} />
-                  <col style={{ width: '7.7%' }} />
-                </colgroup>
+              <div className="req-inner-sheet w-full mx-auto">
+                {/* 메인 외곽 테두리 박스 */}
+                <table className="w-full mx-auto border-collapse border-2 border-black text-center table-fixed">
+                  <colgroup>
+                    <col style={{ width: '4%' }} />
+                    <col style={{ width: '7.5%' }} />
+                    <col style={{ width: '7.5%' }} />
+                    <col style={{ width: '7.5%' }} />
+                    <col style={{ width: '7.5%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '4%' }} />
+                    <col style={{ width: '7.6%' }} />
+                    <col style={{ width: '7.7%' }} />
+                    <col style={{ width: '7.7%' }} />
+                  </colgroup>
 
-                <tbody>
-                  {/* [상단 결재 헤더 영역 - 3행 구조] */}
-                  <tr>
-                    <td
-                      rowSpan={3}
-                      className="border border-black font-bold text-xs leading-tight py-0.5 bg-white select-none"
-                    >
-                      청<br />구<br />부<br />서
-                    </td>
-                    <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
-                      작 성
-                    </td>
-                    <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
-                      검 토
-                    </td>
-                    <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
-                      승 인
-                    </td>
-
-                    {/* 중앙 타이틀: (소모품)청구서 */}
-                    <td
-                      colSpan={4}
-                      rowSpan={3}
-                      className="border border-black align-middle px-2"
-                    >
-                      <h1 className="req-title text-2xl font-black tracking-[0.18em] underline underline-offset-4 decoration-2 text-black">
-                        (소모품)청구서
-                      </h1>
-                    </td>
-
-                    <td
-                      rowSpan={3}
-                      className="border border-black font-bold text-xs leading-tight py-0.5 bg-white select-none"
-                    >
-                      작<br />성<br />부<br />서
-                    </td>
-                    <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
-                      작 성
-                    </td>
-                    <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
-                      검 토
-                    </td>
-                    <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
-                      승 인
-                    </td>
-                  </tr>
-
-                  {/* 결재 도장/서명 빈칸 행 */}
-                  <tr className="req-sign-row h-11">
-                    <td className="border border-black"></td>
-                    <td className="border border-black"></td>
-                    <td className="border border-black"></td>
-
-                    {/* 우측 작성부서 도장칸 */}
-                    <td className="border border-black"></td>
-                    <td
-                      className="border border-black relative p-0"
-                      style={
-                        slashWriterReview
-                          ? {
-                              backgroundImage:
-                                'linear-gradient(to top left, transparent calc(50% - 0.8px), #000 calc(50% - 0.8px), #000 calc(50% + 0.8px), transparent calc(50% + 0.8px))',
-                            }
-                          : undefined
-                      }
-                    ></td>
-                    <td className="border border-black"></td>
-                  </tr>
-
-                  {/* 결재 일자 행 */}
-                  <tr className="req-date-row h-5 text-[11px] text-blue-900 font-semibold">
-                    <td className="border border-black">/</td>
-                    <td className="border border-black">/</td>
-                    <td className="border border-black">/</td>
-
-                    {/* 우측 작성부서 날짜 */}
-                    <td className="border border-black font-mono text-blue-800">
-                      {monthNum} / {dayNum}
-                    </td>
-                    <td className="border border-black">/</td>
-                    <td className="border border-black">/</td>
-                  </tr>
-
-                  {/* [품목 내역 헤더 행] */}
-                  <tr className="req-head-row h-7 border-t-2 border-black font-extrabold text-xs sm:text-sm text-blue-950 bg-white">
-                    <td colSpan={4} className="border border-black tracking-[0.4em]">
-                      품 명
-                    </td>
-                    <td className="border border-black tracking-wider">단위</td>
-                    <td colSpan={3} className="border border-black tracking-[0.6em]">
-                      규 격
-                    </td>
-                    <td colSpan={2} className="border border-black tracking-[0.2em]">
-                      수 량
-                    </td>
-                    <td colSpan={2} className="border border-black tracking-[0.2em]">
-                      사 용 목 적
-                    </td>
-                  </tr>
-
-                  {/* [데이터 행 목록] */}
-                  {rows.map((row, idx) => (
-                    <tr key={row.id} className="req-data-row h-7 text-xs text-blue-800 font-medium">
-                      <td colSpan={4} className="border border-black px-1.5">
-                        <input
-                          type="text"
-                          value={row.itemName}
-                          onChange={(e) => handleRowChange(idx, 'itemName', e.target.value)}
-                          className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
-                        />
+                  <tbody>
+                    {/* [상단 결재 헤더 영역 - 3행 구조] */}
+                    <tr>
+                      <td
+                        rowSpan={3}
+                        className="border border-black font-bold text-xs leading-tight py-0.5 bg-white select-none"
+                      >
+                        청<br />구<br />부<br />서
                       </td>
-                      <td className="border border-black px-1">
-                        <input
-                          type="text"
-                          value={row.unit}
-                          onChange={(e) => handleRowChange(idx, 'unit', e.target.value)}
-                          className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
-                        />
+                      <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
+                        작 성
                       </td>
-                      <td colSpan={3} className="border border-black px-1.5">
-                        <input
-                          type="text"
-                          value={row.spec}
-                          onChange={(e) => handleRowChange(idx, 'spec', e.target.value)}
-                          className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
-                        />
+                      <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
+                        검 토
                       </td>
-                      <td colSpan={2} className="border border-black px-1.5">
-                        <input
-                          type="text"
-                          value={row.qty}
-                          onChange={(e) => handleRowChange(idx, 'qty', e.target.value)}
-                          className="w-full text-center bg-transparent text-blue-800 font-semibold font-mono focus:outline-none focus:bg-blue-50/60"
-                        />
+                      <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
+                        승 인
                       </td>
-                      <td colSpan={2} className="border border-black px-1.5">
-                        <input
-                          type="text"
-                          value={row.purpose}
-                          onChange={(e) => handleRowChange(idx, 'purpose', e.target.value)}
-                          className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
-                        />
+
+                      {/* 중앙 타이틀: (소모품)청구서 */}
+                      <td
+                        colSpan={4}
+                        rowSpan={3}
+                        className="border border-black align-middle px-2"
+                      >
+                        <h1 className="req-title text-2xl font-black tracking-[0.18em] underline underline-offset-4 decoration-2 text-black">
+                          (소모품)청구서
+                        </h1>
+                      </td>
+
+                      <td
+                        rowSpan={3}
+                        className="border border-black font-bold text-xs leading-tight py-0.5 bg-white select-none"
+                      >
+                        작<br />성<br />부<br />서
+                      </td>
+                      <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
+                        작 성
+                      </td>
+                      <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
+                        검 토
+                      </td>
+                      <td className="border border-black py-0.5 text-[11px] font-bold tracking-widest">
+                        승 인
                       </td>
                     </tr>
-                  ))}
 
-                  {/* 부족한 행만큼 빈 격자 줄 추가 */}
-                  {Array.from({ length: emptyRowCount }).map((_, emptyIdx) => (
-                    <tr key={`empty-${emptyIdx}`} className="req-data-row h-7">
-                      <td colSpan={4} className="border border-black"> </td>
-                      <td className="border border-black"> </td>
-                      <td colSpan={3} className="border border-black"> </td>
-                      <td colSpan={2} className="border border-black"> </td>
-                      <td colSpan={2} className="border border-black"> </td>
+                    {/* 결재 도장/서명 빈칸 행 */}
+                    <tr className="req-sign-row h-11">
+                      <td className="border border-black"></td>
+                      <td className="border border-black"></td>
+                      <td className="border border-black"></td>
+
+                      {/* 우측 작성부서 도장칸 */}
+                      <td className="border border-black"></td>
+                      <td
+                        className="border border-black relative p-0"
+                        style={
+                          slashWriterReview
+                            ? {
+                                backgroundImage:
+                                  'linear-gradient(to top left, transparent calc(50% - 0.8px), #000 calc(50% - 0.8px), #000 calc(50% + 0.8px), transparent calc(50% + 0.8px))',
+                              }
+                            : undefined
+                        }
+                      ></td>
+                      <td className="border border-black"></td>
                     </tr>
-                  ))}
 
-                  {/* [하단 일자 / 부서 / 성명 서명 행] */}
-                  <tr className="req-footer-row h-8 border-t-2 border-black text-xs sm:text-sm font-bold text-blue-900">
-                    <td colSpan={12} className="border border-black px-3">
-                      <div className="flex items-center justify-around gap-3">
-                        <div className="tracking-wider">
-                          <span>{yearNum} 년</span>
-                          <span className="ml-2.5">{monthNum} 월</span>
-                          <span className="ml-2.5">{dayNum} 일</span>
-                        </div>
+                    {/* 결재 일자 행 */}
+                    <tr className="req-date-row h-5 text-[11px] text-blue-900 font-semibold">
+                      <td className="border border-black">/</td>
+                      <td className="border border-black">/</td>
+                      <td className="border border-black">/</td>
 
-                        <div className="flex items-center">
-                          <span>(</span>
+                      {/* 우측 작성부서 날짜 */}
+                      <td className="border border-black font-mono text-blue-800">
+                        {monthNum} / {dayNum}
+                      </td>
+                      <td className="border border-black">/</td>
+                      <td className="border border-black">/</td>
+                    </tr>
+
+                    {/* [품목 내역 헤더 행] */}
+                    <tr className="req-head-row h-7 border-t-2 border-black font-extrabold text-xs sm:text-sm text-blue-950 bg-white">
+                      <td colSpan={4} className="border border-black tracking-[0.4em]">
+                        품 명
+                      </td>
+                      <td className="border border-black tracking-wider">단위</td>
+                      <td colSpan={3} className="border border-black tracking-[0.6em]">
+                        규 격
+                      </td>
+                      <td colSpan={2} className="border border-black tracking-[0.2em]">
+                        수 량
+                      </td>
+                      <td colSpan={2} className="border border-black tracking-[0.2em]">
+                        사 용 목 적
+                      </td>
+                    </tr>
+
+                    {/* [데이터 행 목록] */}
+                    {rows.map((row, idx) => (
+                      <tr key={row.id} className="req-data-row h-7 text-xs text-blue-800 font-medium">
+                        <td colSpan={4} className="border border-black px-1.5">
                           <input
                             type="text"
-                            value={deptName}
-                            onChange={(e) => setDeptName(e.target.value)}
-                            className="w-16 text-center bg-transparent text-blue-900 font-bold focus:outline-none focus:bg-blue-50/60"
-                            title="부서명 수정"
+                            value={row.itemName}
+                            onChange={(e) => handleRowChange(idx, 'itemName', e.target.value)}
+                            className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
                           />
-                          <span>)팀</span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <span className="tracking-[0.2em]">성 명 :</span>
+                        </td>
+                        <td className="border border-black px-1">
                           <input
                             type="text"
-                            value={writerName}
-                            onChange={(e) => setWriterName(e.target.value)}
-                            className="w-20 text-center bg-transparent text-blue-900 font-bold focus:outline-none focus:bg-blue-50/60"
-                            title="성명 수정"
+                            value={row.unit}
+                            onChange={(e) => handleRowChange(idx, 'unit', e.target.value)}
+                            className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
                           />
-                          <span className="text-sm font-normal text-blue-900 ml-0.5">㊞</span>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                        </td>
+                        <td colSpan={3} className="border border-black px-1.5">
+                          <input
+                            type="text"
+                            value={row.spec}
+                            onChange={(e) => handleRowChange(idx, 'spec', e.target.value)}
+                            className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
+                          />
+                        </td>
+                        <td colSpan={2} className="border border-black px-1.5">
+                          <input
+                            type="text"
+                            value={row.qty}
+                            onChange={(e) => handleRowChange(idx, 'qty', e.target.value)}
+                            className="w-full text-center bg-transparent text-blue-800 font-semibold font-mono focus:outline-none focus:bg-blue-50/60"
+                          />
+                        </td>
+                        <td colSpan={2} className="border border-black px-1.5">
+                          <input
+                            type="text"
+                            value={row.purpose}
+                            onChange={(e) => handleRowChange(idx, 'purpose', e.target.value)}
+                            className="w-full text-center bg-transparent text-blue-800 font-medium focus:outline-none focus:bg-blue-50/60"
+                          />
+                        </td>
+                      </tr>
+                    ))}
 
-              {/* 최하단 회사명 */}
-              <div className="req-company-name text-center font-black text-base tracking-widest text-black mt-1.5">
-                {activeProfile.companyName || '(주)대성스틸'}
+                    {/* 부족한 행만큼 빈 격자 줄 추가 */}
+                    {Array.from({ length: emptyRowCount }).map((_, emptyIdx) => (
+                      <tr key={`empty-${emptyIdx}`} className="req-data-row h-7">
+                        <td colSpan={4} className="border border-black"> </td>
+                        <td className="border border-black"> </td>
+                        <td colSpan={3} className="border border-black"> </td>
+                        <td colSpan={2} className="border border-black"> </td>
+                        <td colSpan={2} className="border border-black"> </td>
+                      </tr>
+                    ))}
+
+                    {/* [하단 일자 / 부서 / 성명 서명 행] */}
+                    <tr className="req-footer-row h-8 border-t-2 border-black text-xs sm:text-sm font-bold text-blue-900">
+                      <td colSpan={12} className="border border-black px-3">
+                        <div className="flex items-center justify-around gap-3">
+                          <div className="tracking-wider">
+                            <span>{yearNum} 년</span>
+                            <span className="ml-2.5">{monthNum} 월</span>
+                            <span className="ml-2.5">{dayNum} 일</span>
+                          </div>
+
+                          <div className="flex items-center">
+                            <span>(</span>
+                            <input
+                              type="text"
+                              value={deptName}
+                              onChange={(e) => setDeptName(e.target.value)}
+                              className="w-16 text-center bg-transparent text-blue-900 font-bold focus:outline-none focus:bg-blue-50/60"
+                              title="부서명 수정"
+                            />
+                            <span>)팀</span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span className="tracking-[0.2em]">성 명 :</span>
+                            <input
+                              type="text"
+                              value={writerName}
+                              onChange={(e) => setWriterName(e.target.value)}
+                              className="w-20 text-center bg-transparent text-blue-900 font-bold focus:outline-none focus:bg-blue-50/60"
+                              title="성명 수정"
+                            />
+                            <span className="text-sm font-normal text-blue-900 ml-0.5">㊞</span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* 최하단 회사명 */}
+                <div className="req-company-name text-center font-black text-base tracking-widest text-black mt-1.5">
+                  {activeProfile.companyName || '(주)대성스틸'}
+                </div>
               </div>
             </div>
           </div>
@@ -582,7 +605,7 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
           {/* 모달 하단 안내 바 (인쇄 시 숨김) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-3 bg-slate-100 border-t border-slate-200 no-print shrink-0">
             <p className="text-[11px] sm:text-xs text-slate-500">
-              * 인쇄 창에서 <strong>용지: A4 (세로)</strong>, <strong>여백: 없음</strong>, <strong>배율: 100%</strong>로 설정하면 상단 <strong>210mm × 99mm</strong> 크기로 정확히 출력됩니다.
+              * 3등분 절단 용지(<strong>210×99mm</strong>) 출력 시, 프린터 드라이버 용지 설정이 필요하면 인쇄 창 하단의 <strong>[시스템 대화상자를 사용하여 인쇄]</strong>에서 사용자 지정 용지를 선택하세요.
             </p>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
