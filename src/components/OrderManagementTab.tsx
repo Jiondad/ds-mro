@@ -22,6 +22,7 @@ import {
 import { INITIAL_COMPANY_PROFILE } from '../mockData';
 import {
   FileText,
+  FileCheck2,
   Printer,
   Copy,
   Check,
@@ -48,6 +49,7 @@ import {
 } from 'lucide-react';
 import { EditOrderModal } from './EditOrderModal';
 import { EditHistoryModal } from './EditHistoryModal';
+import { InternalRequisitionModal } from './InternalRequisitionModal';
 import { useUrlPersistedState } from '../utils/urlState';
 
 interface OrderManagementTabProps {
@@ -114,9 +116,18 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
     VALID_ORDER_SUB_TABS
   );
 
-  // Modal states for editing
+  // Modal states for editing & internal requisition
   const [editingOrderItem, setEditingOrderItem] = useState<CalculatedItem | null>(null);
   const [editingHistoryRecord, setEditingHistoryRecord] = useState<OrderHistoryRecord | null>(null);
+  const [requisitionModalState, setRequisitionModalState] = useState<{
+    isOpen: boolean;
+    items: CalculatedItem[];
+    date: string;
+  }>({
+    isOpen: false,
+    items: [],
+    date: TODAY_STR,
+  });
 
   // History filtering
   const [historyStatusFilter, setHistoryStatusFilter] = useUrlPersistedState<'전체' | OrderHistoryStatus>(
@@ -484,6 +495,22 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
     );
   };
 
+  // 내부결재용 (소모품)청구서 A4 모달 열기
+  const handleOpenInternalRequisition = (
+    targetItems: CalculatedItem[],
+    targetDate: string = TODAY_STR
+  ) => {
+    if (targetItems.length === 0) {
+      onShowToast('⚠️ 청구서에 포함할 품목을 1개 이상 선택해 주세요.');
+      return;
+    }
+    setRequisitionModalState({
+      isOpen: true,
+      items: targetItems,
+      date: targetDate,
+    });
+  };
+
   // Awaiting items
   const awaitingItems = items.filter((it) => it.orderStatus === '발주완료(입고대기)');
 
@@ -638,6 +665,18 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
     };
   }, [usageLogs, orderHistory, vendors, vendorConfig, items, monthlyBudget]);
 
+  // 현재 발주서 작성 탭에서 선택된 전체 품목 리스트
+  const allSelectedDraftItems = useMemo(() => {
+    const list: CalculatedItem[] = [];
+    vendors.forEach((v) => {
+      const allVendorItems = items
+        .filter((it) => it.vendorId === v.id)
+        .sort(compareItemsByDefaultOrder);
+      list.push(...getSelectedItemsForVendor(v, allVendorItems));
+    });
+    return list;
+  }, [vendors, items, vendorConfig]);
+
   return (
     <div className="space-y-5">
       {/* [RBAC 권한 제어] 현장관리자(Level 1) 및 발주 권한 없는 사용자 안내 배너 */}
@@ -686,7 +725,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-base font-black text-slate-900">
-                  당월(11월) 발주 예산 한도 통제 &amp; 시뮬레이션
+                  당월(11월) 발주 예산 한도 통제 & 시뮬레이션
                 </h3>
                 {orderBudgetStats.isExceeded ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-rose-600 text-white shadow-2xs animate-pulse">
@@ -818,7 +857,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
           }`}
         >
           <ClipboardList className="w-4 h-4" />
-          <span>📋 발주 진행 &amp; 이력 관리 (수정/취소)</span>
+          <span>📋 발주 진행 & 이력 관리 (수정/취소)</span>
           {awaitingItems.length > 0 && (
             <span
               className={`px-2 py-0.5 text-xs font-black rounded-full ${
@@ -837,51 +876,64 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
       {activeSubTab === 'create' && (
         <div className="space-y-6 animate-fade-in">
           {/* Top Controls Banner */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <div>
-          <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            거래처별 자동 발주서 생성 &amp; 조기 묶음발주(합발주) 관리
-          </h3>
-          <p className="text-xs text-slate-500 mt-1">
-            소모품의 안전재고 부족 항목을 거래처(삼전성림, 덕일휄트, 대일특수강 등)별로 자동 그룹핑하며, 같은 거래처의 임박·여유 품목을 체크하여 묶음 발주할 수 있습니다.
-          </p>
-        </div>
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                거래처별 자동 발주서 생성 & 조기 묶음발주(합발주) 관리
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                소모품의 안전재고 부족 항목을 거래처(삼전성림, 덕일휄트, 대일특수강 등)별로 자동 그룹핑하며, 같은 거래처의 임박·여유 품목을 체크하여 묶음 발주할 수 있습니다.
+              </p>
+            </div>
 
-        {/* Filter Toggle */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-lg text-xs font-semibold">
-          <button
-            onClick={() => setFilterMode('needed')}
-            className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
-              filterMode === 'needed'
-                ? 'bg-rose-600 text-white shadow-xs font-bold'
-                : 'text-rose-700 hover:text-rose-900'
-            }`}
-          >
-            발주 필요만 ({items.filter((i) => i.needsOrder).length})
-          </button>
-          <button
-            onClick={() => setFilterMode('imminent')}
-            className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
-              filterMode === 'imminent'
-                ? 'bg-amber-500 text-slate-950 shadow-xs font-extrabold'
-                : 'text-amber-800 hover:text-amber-950'
-            }`}
-          >
-            발주 임박 포함 ({items.filter((i) => i.needsOrder || i.isOrderImminent).length})
-          </button>
-          <button
-            onClick={() => setFilterMode('all')}
-            className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
-              filterMode === 'all'
-                ? 'bg-white text-slate-900 shadow-xs font-bold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            전체 품목 보기 ({items.length})
-          </button>
-        </div>
-      </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* 선택 품목 전체 사내결재용 청구서 A4 출력 버튼 */}
+              <button
+                type="button"
+                onClick={() => handleOpenInternalRequisition(allSelectedDraftItems, TODAY_STR)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold shadow-xs transition-colors cursor-pointer"
+                title="체크된 전체 발주 품목을 사내 결재용 (소모품)청구서 A4 양식으로 띄웁니다"
+              >
+                <FileCheck2 className="w-4 h-4" />
+                <span>사내결재 청구서(A4) 발행 ({allSelectedDraftItems.length}종)</span>
+              </button>
+
+              {/* Filter Toggle */}
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-lg text-xs font-semibold">
+                <button
+                  onClick={() => setFilterMode('needed')}
+                  className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
+                    filterMode === 'needed'
+                      ? 'bg-rose-600 text-white shadow-xs font-bold'
+                      : 'text-rose-700 hover:text-rose-900'
+                  }`}
+                >
+                  발주 필요만 ({items.filter((i) => i.needsOrder).length})
+                </button>
+                <button
+                  onClick={() => setFilterMode('imminent')}
+                  className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
+                    filterMode === 'imminent'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs font-extrabold'
+                      : 'text-amber-800 hover:text-amber-950'
+                  }`}
+                >
+                  발주 임박 포함 ({items.filter((i) => i.needsOrder || i.isOrderImminent).length})
+                </button>
+                <button
+                  onClick={() => setFilterMode('all')}
+                  className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
+                    filterMode === 'all'
+                      ? 'bg-white text-slate-900 shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  전체 품목 보기 ({items.length})
+                </button>
+              </div>
+            </div>
+          </div>
 
       {/* Vendor Groups List */}
       <div className="space-y-6">
@@ -1339,7 +1391,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                     <span className="text-slate-500 text-[11px]">(VAT 별도)</span>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+                  <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
                     {/* Clipboard Text Copy */}
                     <button
                       onClick={() => handleCopyVendorText(vendor, allVendorItems)}
@@ -1357,6 +1409,19 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                       </span>
                     </button>
 
+                    {/* 내부결재용 (소모품)청구서 A4 팝업 & 출력 */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleOpenInternalRequisition(selectedItems, cfg.orderDate)
+                      }
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer w-full sm:w-auto active:scale-98"
+                      title="사내 결재용 (소모품)청구서 A4 양식 미리보기 및 인쇄"
+                    >
+                      <FileCheck2 className="w-4 h-4" />
+                      <span>내부결재 청구서(A4)</span>
+                    </button>
+
                     {/* A4 Printable PO Modal */}
                     <button
                       onClick={() =>
@@ -1370,7 +1435,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                       className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer w-full sm:w-auto active:scale-98"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>공식 발주서(PO) A4 미리보기 &amp; 인쇄</span>
+                      <span>공식 발주서(PO) A4 인쇄</span>
                     </button>
 
                     {/* Confirm Order in System */}
@@ -1385,7 +1450,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                       title={!canEditOrders ? '사무실사용자(Level 3) 및 최고관리자만 발주 확정이 가능합니다.' : undefined}
                     >
                       <Send className="w-4 h-4" />
-                      <span>발주 확정 &amp; 입고예정 등록</span>
+                      <span>발주 확정 & 입고예정 등록</span>
                     </button>
                   </div>
                 </div>
@@ -1451,6 +1516,18 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
               </p>
             </div>
           </div>
+
+          {awaitingItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => handleOpenInternalRequisition(awaitingItems, TODAY_STR)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold shadow-xs transition-colors cursor-pointer shrink-0"
+              title="현재 입고대기 중인 전체 품목을 사내 결재용 (소모품)청구서 A4 양식으로 띄웁니다"
+            >
+              <FileCheck2 className="w-4 h-4" />
+              <span>입고대기 전체 내부결재 청구서(A4) ({awaitingItems.length}건)</span>
+            </button>
+          )}
         </div>
 
         {awaitingItems.length === 0 ? (
@@ -1473,7 +1550,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                     <th className="py-3 px-3.5 text-center whitespace-nowrap">입고예정일</th>
                     <th className="py-3 px-3.5 whitespace-nowrap">라인</th>
                     <th className="py-3 px-3.5 whitespace-nowrap">카테고리</th>
-                    <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 &amp; 규격</th>
+                    <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 & 규격</th>
                     <th className="py-3 px-3.5 whitespace-nowrap">거래처</th>
                     <th className="py-3 px-3.5 text-right whitespace-nowrap">발주수량(포장·환산)</th>
                     <th className="py-3 px-3.5 text-right whitespace-nowrap">발주금액</th>
@@ -1772,7 +1849,7 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
                 <th className="py-3 px-3.5 whitespace-nowrap">입고(예정)일</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">거래처</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">라인</th>
-                <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 &amp; 규격</th>
+                <th className="py-3 px-3.5 whitespace-nowrap min-w-[220px]">품목명 & 규격</th>
                 <th className="py-3 px-3.5 text-right whitespace-nowrap">발주수량</th>
                 <th className="py-3 px-3.5 text-right whitespace-nowrap">총금액</th>
                 <th className="py-3 px-3.5 text-center whitespace-nowrap">납품장소</th>
@@ -1970,6 +2047,18 @@ export const OrderManagementTab: React.FC<OrderManagementTabProps> = ({
     isOpen={!!editingHistoryRecord}
     onClose={() => setEditingHistoryRecord(null)}
     onSave={onUpdateOrderHistoryRecord}
+  />
+
+  {/* Internal Requisition A4 Print Modal (사내결재용 (소모품)청구서) */}
+  <InternalRequisitionModal
+    isOpen={requisitionModalState.isOpen}
+    onClose={() =>
+      setRequisitionModalState((prev) => ({ ...prev, isOpen: false }))
+    }
+    items={requisitionModalState.items}
+    requisitionDate={requisitionModalState.date}
+    companyProfile={activeProfile}
+    currentUser={currentUser}
   />
 </div>
 );
