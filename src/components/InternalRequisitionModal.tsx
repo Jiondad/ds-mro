@@ -31,7 +31,7 @@ const escapeHtml = (str: string): string =>
     .replace(/</g, '<')
     .replace(/>/g, '>')
     .replace(/"/g, '"')
-    .replace(/'/g, ''');
+    .replace(/'/g, '&' + '#39;');
 
 const formatSpacedName = (rawName: string): string => {
   const cleaned = (rawName || '')
