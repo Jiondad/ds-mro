@@ -157,11 +157,11 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
 
   return (
     <>
-      {/* 210mm × 99mm (A4 3등분 절단 용지) 전용 인쇄 CSS — 중앙 정렬 & 1장 출력 */}
+      {/* A4 세로 최상단 210mm × 99mm 정중앙 배치 & 1장 고정 인쇄 CSS */}
       <style>{`
         @media print {
           @page {
-            size: 210mm 99mm;
+            size: A4 portrait;
             margin: 0 !important;
           }
           html, body {
@@ -192,7 +192,7 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
-            justify-content: center !important;
+            justify-content: flex-start !important;
             background: #ffffff !important;
             z-index: 99999 !important;
             overflow: hidden !important;
@@ -202,8 +202,7 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
             print-color-adjust: exact !important;
           }
           .requisition-print-root .req-inner-sheet {
-            width: 198mm !important;
-            max-width: 100% !important;
+            width: 100% !important;
             margin: 0 auto !important;
           }
           .requisition-print-root table {
@@ -368,16 +367,16 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
               </label>
             </div>
             <span className="text-[11px] text-slate-500">
-              * 총 <strong>{rows.length}</strong>개 품목 · 용지 규격: <strong>210mm × 99mm (1매 전용)</strong>
+              * 총 <strong>{rows.length}</strong>개 품목 · 출력 규격: <strong>A4 세로 상단 210mm × 99mm (1매 고정)</strong>
             </span>
           </div>
 
           {/* ============================================================
-              인쇄 전용 영역 (210mm × 99mm 정확히 중앙 정렬)
+              인쇄 전용 영역 (A4 세로 최상단 210mm × 99mm 좌우 정중앙)
              ============================================================ */}
           <div className="p-4 sm:p-6 bg-slate-200/70 overflow-auto flex-1">
             <div
-              className="requisition-print-root mx-auto flex flex-col items-center justify-center bg-white text-black font-sans shadow-md border border-slate-300 print:shadow-none print:border-none"
+              className="requisition-print-root mx-auto flex flex-col items-center justify-start bg-white text-black font-sans shadow-md border border-slate-300 print:shadow-none print:border-none"
               style={{ width: '210mm', minHeight: '99mm', padding: '4mm 6mm 3mm 6mm', boxSizing: 'border-box' }}
             >
               <div className="req-inner-sheet w-full mx-auto">
@@ -605,7 +604,7 @@ export const InternalRequisitionModal: React.FC<InternalRequisitionModalProps> =
           {/* 모달 하단 안내 바 (인쇄 시 숨김) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-3 bg-slate-100 border-t border-slate-200 no-print shrink-0">
             <p className="text-[11px] sm:text-xs text-slate-500">
-              * 3등분 절단 용지(<strong>210×99mm</strong>) 출력 시, 프린터 드라이버 용지 설정이 필요하면 인쇄 창 하단의 <strong>[시스템 대화상자를 사용하여 인쇄]</strong>에서 사용자 지정 용지를 선택하세요.
+              * <strong>A4 세로</strong> 상단 1/3(210×99mm) 정중앙에 맞춰 출력됩니다. 3등분 절단 용지 급지 시 용지 크기 오류가 뜨면 하단 <strong>[시스템 대화상자]</strong>에서 사용자 지정 용지를 선택하세요.
             </p>
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
